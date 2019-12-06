@@ -165,9 +165,11 @@ def main(data='../out/instances', algorithm=None, top_k=100, lr=1e-3, decay=1e-3
             desc = f'Epoch {epoch}'
             trn_loss = 0
             for inputs, labels in tqdm.tqdm(trn_data, desc, trn_batches):
-                #trn_loss += model.train(inputs, labels, optimizer)
                 with tf.GradientTape() as tape:
-                    logits = model(inputs, (model.embeddings, model.categories))
+                    if algorithm=='rnn-v2' or algorithm=='rnn-v3' or algorithm=='rnn-v4':
+                        logits = model(inputs, (model.embeddings, model.categories))
+                    else:
+                        logits = model(inputs,model.embeddings)
                     loss = tf.reduce_mean(cce(labels, logits))
                 gradients = tape.gradient(loss, model.trainable_variables)
                 optimizer.apply_gradients(zip(gradients, model.trainable_variables))

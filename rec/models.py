@@ -72,7 +72,7 @@ class BaselineModel(Model):
         """
         orders = inputs[1]
         orders_x = tf.gather_nd(self.embeddings, tf.expand_dims(orders, 2))
-        cands_x = candidates[0]
+        candidates
 
         if self.mode == 'average':
             out = tf.reduce_sum(orders_x, axis=1)
@@ -81,7 +81,7 @@ class BaselineModel(Model):
             out = orders_x[:, -1, :]
         else:
             raise ValueError(self.mode)
-        return layers.dot([out, self.permute(cands_x)])
+        return layers.dot([out, self.permute(candidates)])
 
 class RNN1(Model):
     """
@@ -110,7 +110,6 @@ class RNN1(Model):
         self.linear = layers.Dense(embeddings.shape[1], kernel_regularizer=regularizers.l2(decay),
                                     bias_regularizer=regularizers.l2(decay))
         self.softmax_bias = tf.zeros(embeddings.shape[0])
-        self.categories = None
         self.permute=layers.Permute((2,1))
 
     @tf.function
@@ -122,49 +121,13 @@ class RNN1(Model):
         :param candidates: a tuple of input tensors for candidates.
         :return: the predicted scores for all candidates.
         """
-        users, orders, clicks = inputs
-        orders = self._lookup_features(orders)
+        _, orders, clicks = inputs
+        orders = tf.gather_nd(self.embeddings, tf.expand_dims(orders, 2))
         orders = self.lstm(orders)
-        clicks = self._lookup_features(clicks)
-        out = self._run_attention(users, orders, clicks)
+        clicks = tf.gather_nd(self.embeddings, tf.expand_dims(clicks, 2))
+        out = orders[:, -1, :]
         out = self.linear(out)
-
-        cands_x, cands_c = candidates
-        cands_v = self._lookup_candidates(cands_x, cands_c)
-        return layers.dot([out, self.permute(cands_v)])
-
-    @tf.function
-    def _lookup_features(self, seqs):
-        """
-        Look up the feature vectors of all items in sequences.
-
-        :param seqs: the behavioral sequences for predictions.
-        :return: the feature vectors.
-        """
-        return tf.gather_nd(self.embeddings, tf.expand_dims(seqs, 2))
-
-    @tf.function
-    def _run_attention(self, users, vec_orders, vec_clicks):
-        """
-        Run an attention mechanism for getting an output.
-
-        :param users: users in the given inputs.
-        :param vec_orders: the output (hidden) vectors of orders.
-        :param vec_clicks: the output (hidden) vectors of clicks.
-        :return: the chosen vector.
-        """
-        return vec_orders[:, -1, :]
-
-    @tf.function
-    def _lookup_candidates(self, embeddings, categories):
-        """
-        Look up candidate vectors by embeddings and categories.
-
-        :param embeddings: the embeddings of candidates.
-        :param categories: the categories of candidates.
-        :return: the chosen vectors.
-        """
-        return embeddings
+        return layers.dot([out, self.permute(candidates)])
 
 class RNN2(RNN1):
     """
@@ -195,6 +158,26 @@ class RNN2(RNN1):
             self.emb_layer = layers.Dense(nx,'tanh')
 
         self.softmax=layers.Softmax(1)
+
+    @tf.function
+    def call(self, inputs, candidates):
+        """
+        Run forward propagation to produce outputs.
+
+        :param inputs: a tuple of input tensors for predictions.
+        :param candidates: a tuple of input tensors for candidates.
+        :return: the predicted scores for all candidates.
+        """
+        users, orders, clicks = inputs
+        orders = self._lookup_features(orders)
+        orders = self.lstm(orders)
+        clicks = self._lookup_features(clicks)
+        out = self._run_attention(users, orders, clicks)
+        out = self.linear(out)
+
+        cands_x, cands_c = candidates
+        cands_v = self._lookup_candidates(cands_x, cands_c)
+        return layers.dot([out, self.permute(cands_v)])
 
     @tf.function
     def _lookup_features(self, seqs):
@@ -242,6 +225,18 @@ class RNN2(RNN1):
             return self.emb_layer(out)
         else:
             raise ValueError()
+
+    @tf.function
+    def _run_attention(self, users, vec_orders, vec_clicks):
+        """
+        Run an attention mechanism for getting an output.
+
+        :param users: users in the given inputs.
+        :param vec_orders: the output (hidden) vectors of orders.
+        :param vec_clicks: the output (hidden) vectors of clicks.
+        :return: the chosen vector.
+        """
+        return vec_orders[:, -1, :]
 
 
 class RNN3(RNN2):
