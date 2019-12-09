@@ -49,7 +49,7 @@ class BaselineModel(Model):
     """
     is_trainable = False
 
-    def __init__(self, embeddings, mode='average'):
+    def __init__(self,num_item,item_emb_len, embeddings, mode='average'):
         """
         Class initializer.
 
@@ -57,7 +57,7 @@ class BaselineModel(Model):
         :param mode: the prediction mode of this model: average or last.
         """
         super().__init__()
-        self.embeddings = tf.convert_to_tensor(embeddings, dtype=tf.float32)
+        self.item_emb=layers.Embedding(num_item+1,item_emb_len,embeddings_initializer=embeddings,trainable=False)
         self.mode = mode
         self.permute=layers.Permute((2,1))
 
@@ -71,8 +71,7 @@ class BaselineModel(Model):
         :return: the predicted scores for all candidates.
         """
         orders = inputs[1]
-        orders_x = tf.gather_nd(self.embeddings, tf.expand_dims(orders, 2))
-        candidates
+        orders_x = self.item_emb(orders)
 
         if self.mode == 'average':
             out = tf.reduce_sum(orders_x, axis=1)
@@ -89,7 +88,7 @@ class RNN1(Model):
     """
     is_trainable = True
 
-    def __init__(self, embeddings, num_units=32, num_layers=1, decay=0):
+    def __init__(self,num_item,item_emb_len, embeddings, num_units=32, num_layers=1, decay=0):
         """
         Class initializer.
 
@@ -99,7 +98,7 @@ class RNN1(Model):
         :param decay: an L2 decay parameter for regularization.
         """
         super().__init__()
-        self.embeddings = tf.convert_to_tensor(embeddings, dtype=tf.float32)
+        self.item_emb=layers.Embedding(num_item+1,item_emb_len,embeddings_initializer=embeddings,mask_zero=True,trainable=False)
         lstm = Sequential()
         for _ in range(num_layers):
             lstm.add(layers.LSTM(num_units, return_sequences=True,
@@ -122,9 +121,9 @@ class RNN1(Model):
         :return: the predicted scores for all candidates.
         """
         _, orders, clicks = inputs
-        orders = tf.gather_nd(self.embeddings, tf.expand_dims(orders, 2))
+        orders = self.item_emb(orders)
         orders = self.lstm(orders)
-        clicks = tf.gather_nd(self.embeddings, tf.expand_dims(clicks, 2))
+        clicks = self.item_emb(clicks)
         out = orders[:, -1, :]
         out = self.linear(out)
         return layers.dot([out, self.permute(candidates)])
@@ -133,8 +132,8 @@ class RNN2(RNN1):
     """
     RNN 2 model for recommendation, which uses category information.
     """
-    def __init__(self, embeddings, categories, emb_way='mean', num_units=32,
-                 num_layers=1, decay=0):
+    def __init__(self,num_item,item_emb_len, embeddings, categories, num_units=32,
+                 num_layers=1, decay=0, emb_way='mean'):
         """
         Class initializer.
 
@@ -188,12 +187,12 @@ class RNN2(RNN1):
         :return: the feature vectors.
         """
         seq_index = tf.expand_dims(seqs, 2)
-        embeddings = tf.gather_nd(self.embeddings, seq_index)
+        item_embs = self.item_emb(seqs)
         categories = tf.gather_nd(self.categories, seq_index)
         categories = normalize_categories(categories, axis=2)
         cat_embeddings = self.cat_embeddings.weights[0]
         cat_embeddings = tf.tensordot(categories, cat_embeddings, axes=[[2], [0]])
-        return self._combine_embeddings(embeddings, cat_embeddings)
+        return self._combine_embeddings(item_embs, cat_embeddings)
 
     @tf.function
     def _lookup_candidates(self, embeddings, categories):  # N x D
@@ -267,7 +266,7 @@ class RNN4(RNN2):
     RNN 3 model for recommendation, which uses clicks for attention keys.
     """
 
-    def __init__(self, embeddings, categories, num_layers, num_units, decay, **kwargs):
+    def __init__(self,num_item,item_emb_len, embeddings, categories, num_layers, num_units, decay,emb_way):
         """
         Class initializer.
 
@@ -276,9 +275,8 @@ class RNN4(RNN2):
         :param num_layers: the number of LSTM layers.
         :param num_units: the number of hidden units in each LSTM cell.
         :param decay: an L2 decay parameter for regularization.
-        :param kwargs: a dictionary of other arguments (mainly for RNN 2).
         """
-        super().__init__(embeddings, categories, num_layers=num_layers, num_units=num_units, **kwargs)
+        super().__init__(num_item,item_emb_len,embeddings, categories, num_layers=num_layers, num_units=num_units)
         self.lstm_click = Sequential()
         for _ in range(num_layers):
             self.lstm_click.add(

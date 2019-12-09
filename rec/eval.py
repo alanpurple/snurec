@@ -65,7 +65,11 @@ def main(algorithm=None, load=None, data='../out/instances', gpu=0, pos_cases=10
     path_out = os.path.join(load, 'predictions')
 
     titles = read_titles(path_items)
-    candidates = read_items(path_items)
+    item_emb=np.load('../doc2vec_128_2_10epochs_table.npy')
+    num_items=item_emb.shape[0]-1
+    emb_len=item_emb.shape[1]
+    if algorithm=='rnn-v2' or algorithm=='rnn-v3' or algorithm=='rnn-v4':
+        category_table=np.load('./cate.npy')
     dataset = read_instances(path_instances, batch_size=128)
 
     # model = initialize_model(algorithm, *candidates)
@@ -74,15 +78,16 @@ def main(algorithm=None, load=None, data='../out/instances', gpu=0, pos_cases=10
     if algorithm[:3]=='rnn':
         model = Model.load(os.path.join(load, 'model/model.tf'))
     elif algorithm in {'last', 'average'}:
-        model = models.BaselineModel(candidates, mode=algorithm)
+        model = models.BaselineModel(num_items,emb_len,item_emb, mode=algorithm)
     else:
         raise Exception('unknown algorithm')
 
-    candidate_tensors = array_to_tensor(candidates)
     p_counts, n_counts = 0, 0
     for inputs, labels in dataset:
-        scores, predictions = tf.math.top_k(model(inputs,candidate_tensors),top_k,sorted=True)
-
+        if algorithm=='rnn-v2' or algorithm=='rnn-v3' or algorithm=='rnn-v4':
+             scores, predictions = tf.math.top_k(model(inputs,(item_emb,category_table)),top_k,sorted=True)
+        else:
+            scores, predictions = tf.math.top_k(model(inputs,item_emb),top_k,sorted=True)
         orders = inputs[1].numpy()
         labels = labels.numpy()
         scores = scores.numpy()

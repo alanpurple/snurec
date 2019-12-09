@@ -38,7 +38,8 @@ CATEGORY_ID = 'gnb_category_id'
 CATEGORY_IDX = 'gnb_category_idx'
 
 
-def initialize_model(name, embeddings, categories, **kwargs):
+def initialize_model(name,num_items,emb_len, embeddings, categories,
+                    num_layers=1,num_units=128,decay=0,emb_way='mlp'):
     """
     Initialize a recommendation model based on its name.
 
@@ -49,41 +50,30 @@ def initialize_model(name, embeddings, categories, **kwargs):
     :return: the initialized model.
     """
 
-    def get_value(key, default):
-        if key in kwargs and kwargs[key] is not None:
-            return kwargs[key]
-        else:
-            return default
-
-    num_layers = get_value('num_layers', default=1)
-    num_units = get_value('num_units', default=128)
-    emb_way = get_value('emb_way', default='mlp')
-    decay = get_value('decay', default=0)
-
     if name in {'last', 'average'}:
-        return models.BaselineModel(embeddings, mode=name)
+        return models.BaselineModel(num_items,emb_len,embeddings, mode=name)
     elif name == 'rnn-v1':
-        return models.RNN1(embeddings,
+        return models.RNN1(num_items,emb_len,embeddings,
                            num_layers=num_layers,
                            num_units=num_units,
                            decay=decay)
     elif name == 'rnn-v2':
-        return models.RNN2(embeddings, categories,
-                           num_layers=num_layers,
-                           num_units=num_units,
-                           emb_way=emb_way,
-                           decay=decay)
-    elif name == 'rnn-v3':
-        return models.RNN3(embeddings, categories,
-                           num_layers=num_layers,
-                           num_units=num_units,
-                           emb_way=emb_way,
-                           decay=decay)
-    elif name == 'rnn-v4':
-        return models.RNN4(embeddings, categories,
+        return models.RNN2(num_items,emb_len,embeddings, categories,
                            num_layers=num_layers,
                            num_units=num_units,
                            decay=decay,
+                           emb_way=emb_way,
+                           )
+    elif name == 'rnn-v3':
+        return models.RNN3(num_items,emb_len,embeddings, categories,
+                           num_layers=num_layers,
+                           num_units=num_units,
+                           decay=decay,
+                           emb_way=emb_way
+                           )
+    elif name == 'rnn-v4':
+        return models.RNN4(num_items,emb_len,embeddings, categories,
+                           num_layers,num_units, decay,
                            emb_way=emb_way)
     else:
         raise ValueError(name)
@@ -107,19 +97,6 @@ def read_titles(path):
     :return: the loaded NumPy array.
     """
     return np.load(os.path.join(path, 'titles.npy'))
-
-
-def read_items(path):
-    """
-    Read item information (for both training and evaluation).
-
-    :param path: the path to a directory containing item information.
-    :return: the pair of loaded information.
-    """
-    embeddings = np.load(os.path.join(path, 'embeddings.npy')).astype(np.float32)
-    categories = np.load(os.path.join(path, 'categories.npy')).astype(np.float32)
-    return embeddings, categories
-
 
 def read_instances(path, batch_size, buffer_size=10000):
     """

@@ -55,7 +55,7 @@ def evaluate_loss(model, data):
     return loss / batches
 
 
-def evaluate_accuracy(model, data, embeddings, categories, k):
+def evaluate_accuracy(has_cate,model, data, embeddings, k,categories=None):
     """
     Evaluate the accuracy of a given model for all data.
 
@@ -66,10 +66,12 @@ def evaluate_accuracy(model, data, embeddings, categories, k):
     :param top_k: the number of items to be evaluated.
     :return: the calculated accuracy.
     """
-    candidates = (embeddings, categories)
     n_data, n_corrects = 0, 0
     for inputs, labels in data:
-        predictions = model(inputs, candidates)
+        if has_cate:
+            predictions = model(inputs, (embeddings,categories))
+        else:
+            predictions = model(inputs,embeddings)
         top_k= tf.math.top_k(predictions, k, sorted=True)[1]
         compared = tf.equal(tf.expand_dims(labels, axis=1), top_k)
         corrects = tf.reduce_sum(tf.cast(compared, dtype=tf.float32), axis=1)
@@ -121,7 +123,13 @@ def main(data='../out/instances', algorithm=None, top_k=100, lr=1e-3, decay=1e-3
     os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu)
 
     users = read_users(os.path.join(data, 'users'))
-    embeddings, categories = read_items(os.path.join(data, 'items'))
+    item_emb=np.load('../doc2vec_128_2_10epochs_table.npy')
+    num_items=item_emb.shape[0]-1
+    emb_len=item_emb.shape[1]
+    has_cate=False
+    if algorithm=='rnn-v2' or algorithm=='rnn-v3' or algorithm=='rnn-v4':
+        has_cate=True
+        category_table=np.load('./cate.npy')
 
     trn_path = os.path.join(data, 'training')
     val_path = os.path.join(data, 'validation')
@@ -135,14 +143,21 @@ def main(data='../out/instances', algorithm=None, top_k=100, lr=1e-3, decay=1e-3
     assert num_users is not None
     if emb_way is None:
         emb_way='mean'
-    model = initialize_model(
-        algorithm,
-        embeddings,
-        categories,
-        num_units=num_units,
-        num_layers=num_layers,
-        decay=decay,
-        emb_way=emb_way)
+    if has_cate:
+        model = initialize_model(
+            algorithm,
+            num_items,emb_len,item_emb,
+            category_table,
+            num_layers,num_units,
+            decay=decay,
+            emb_way=emb_way)
+    else:
+        model = initialize_model(
+            algorithm,
+            num_items,emb_len,item_emb,
+            num_layers,num_units,
+            decay=decay,
+            emb_way=emb_way)
 
     out = f'../out/{algorithm}' if out is None else out
     os.makedirs(out, exist_ok=True)
@@ -166,7 +181,7 @@ def main(data='../out/instances', algorithm=None, top_k=100, lr=1e-3, decay=1e-3
             trn_loss = 0
             for inputs, labels in tqdm.tqdm(trn_data, desc, trn_batches):
                 with tf.GradientTape() as tape:
-                    if algorithm=='rnn-v2' or algorithm=='rnn-v3' or algorithm=='rnn-v4':
+                    if has_cate:
                         logits = model(inputs, (model.embeddings, model.categories))
                     else:
                         logits = model(inputs,model.embeddings)
@@ -197,10 +212,14 @@ def main(data='../out/instances', algorithm=None, top_k=100, lr=1e-3, decay=1e-3
     trn_loss = evaluate_loss(model, trn_data)
     val_loss = evaluate_loss(model, val_data)
 
-    args = embeddings, categories, top_k
-    trn_acc = evaluate_accuracy(model, trn_data, *args)
-    val_acc = evaluate_accuracy(model, val_data, *args)
-    test_acc = evaluate_accuracy(model, test_data, *args)
+    if has_cate:
+        trn_acc = evaluate_accuracy(True,model, trn_data, item_emb,top_k,category_table)
+        val_acc = evaluate_accuracy(True,model, val_data, item_emb,top_k,category_table)
+        test_acc = evaluate_accuracy(True,model, test_data, item_emb,top_k,category_table)
+    else:
+        trn_acc = evaluate_accuracy(False,model, trn_data, item_emb,top_k)
+        val_acc = evaluate_accuracy(False,model, val_data, item_emb,top_k)
+        test_acc = evaluate_accuracy(False,model, test_data, item_emb,top_k)
 
     out_summary = os.path.join(out, 'summary.tsv')
 
