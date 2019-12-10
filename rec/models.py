@@ -47,7 +47,6 @@ class BaselineModel(Model):
     """
     Base model for recommendation, which has no learnable parameters.
     """
-    is_trainable = False
 
     def __init__(self,num_item,item_emb_len, embeddings, mode='average'):
         """
@@ -86,7 +85,6 @@ class RNN1(Model):
     """
     RNN 1 model for recommendation, which uses none of important techniques.
     """
-    is_trainable = True
 
     def __init__(self,num_item,item_emb_len, embeddings, num_units=32, num_layers=1, decay=0):
         """
@@ -144,14 +142,15 @@ class RNN2(RNN1):
         :param num_layers: the number of LSTM layers.
         :param decay: an L2 decay parameter for regularization.
         """
-        super().__init__(embeddings, num_units, num_layers, decay)
+        super().__init__(num_item,item_emb_len,embeddings, num_units, num_layers, decay)
 
         nx = embeddings.shape[1]
         nc = categories.shape[1]
 
-        self.categories = tf.convert_to_tensor(categories, dtype=tf.float32)
+        self.cate_emb=layers.Embedding(categories.shape[0],categories.shape[1],embeddings_initializer=categories,
+                                        mask_zero=True,trainable=False)
         self.cat_embeddings = layers.Embedding(nc, nx,embeddings_regularizer=regularizers.l2(decay),
-                                initializer='zeros')
+                                embeddings_initializer='zeros',mask_zero=True)
         self.emb_way = emb_way
         if emb_way == 'mlp':
             self.emb_layer = layers.Dense(nx,'tanh')
@@ -186,9 +185,9 @@ class RNN2(RNN1):
         :param seqs: the behavioral sequences for predictions.
         :return: the feature vectors.
         """
-        seq_index = tf.expand_dims(seqs, 2)
+
         item_embs = self.item_emb(seqs)
-        categories = tf.gather_nd(self.categories, seq_index)
+        categories = self.cate_emb(seqs)
         categories = normalize_categories(categories, axis=2)
         cat_embeddings = self.cat_embeddings.weights[0]
         cat_embeddings = tf.tensordot(categories, cat_embeddings, axes=[[2], [0]])

@@ -21,19 +21,6 @@ import numpy as np
 from rec import models
 from rec.utils import *
 
-
-def array_to_tensor(candidates):
-    """
-    Convert NumPy arrays to Tensors.
-
-    :param candidates: a tuple of candidate information.
-    :return: the converted Tensors.
-    """
-    cands_x = tf.convert_to_tensor(candidates[0], dtype=tf.float32)
-    cands_c = tf.convert_to_tensor(candidates[1], dtype=tf.float32)
-    return cands_x, cands_c
-
-
 @click.command()
 @click.option('--algorithm', '-a', type=str, default=None)
 @click.option('--load', '-l', type=click.Path(), default=None)
