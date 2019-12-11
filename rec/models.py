@@ -57,7 +57,9 @@ class BaselineModel(Model):
         """
         super().__init__()
         self.item_emb=layers.Embedding(num_item+1,item_emb_len,trainable=False)
-        self.item_emb.set_weights(embeddings)
+        # initialzie embedding matrix before setting
+        dummy=self.item_emb(0)
+        self.item_emb.set_weights([embeddings])
         self.mode = mode
         self.permute=layers.Permute((2,1))
 
@@ -97,7 +99,9 @@ class RNN1(Model):
         """
         super().__init__()
         self.item_emb=layers.Embedding(num_item+1,item_emb_len,mask_zero=True,trainable=False)
-        self.item_emb.set_weights(embeddings)
+        # initialzie embedding matrix before setting
+        dummy=self.item_emb(0)
+        self.item_emb.set_weights([embeddings])
         lstm = Sequential()
         for _ in range(num_layers):
             lstm.add(layers.LSTM(num_units, return_sequences=True,
@@ -147,7 +151,9 @@ class RNN2(RNN1):
         nc = categories.shape[1]
 
         self.cate_emb=layers.Embedding(categories.shape[0],categories.shape[1],mask_zero=True,trainable=False)
-        self.cate_emb.set_weights(categories)
+        # initialzie embedding matrix before setting
+        dummy=self.cate_emb(0)
+        self.cate_emb.set_weights([categories])
         self.cat_embeddings = layers.Embedding(nc, nx,embeddings_regularizer=regularizers.l2(decay),
                                 embeddings_initializer='zeros',mask_zero=True)
         self.emb_way = emb_way
