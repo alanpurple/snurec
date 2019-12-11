@@ -72,9 +72,9 @@ def main(algorithm=None, load=None, data='../out/instances', gpu=0, pos_cases=10
     p_counts, n_counts = 0, 0
     for inputs, labels in dataset:
         if algorithm=='rnn-v2' or algorithm=='rnn-v3' or algorithm=='rnn-v4':
-             scores, predictions = tf.math.top_k(model(inputs,(item_emb,category_table)),top_k,sorted=True)
+             scores, predictions = tf.math.top_k(model(inputs),top_k,sorted=True)
         else:
-            scores, predictions = tf.math.top_k(model(inputs,item_emb),top_k,sorted=True)
+            scores, predictions = tf.math.top_k(model(inputs),top_k,sorted=True)
         orders = inputs[1].numpy()
         labels = labels.numpy()
         scores = scores.numpy()

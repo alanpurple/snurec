@@ -48,14 +48,14 @@ def evaluate_loss(model, data):
     """
     loss, batches = 0, 0
     for inputs, labels in data:
-        logits = model(inputs, (model.embeddings, model.categories))
+        logits = model(inputs)
         cce=losses.SparseCategoricalCrossentropy()
         loss+= tf.reduce_mean(cce(labels, logits))
         batches+=1
     return loss / batches
 
 
-def evaluate_accuracy(has_cate,model, data, embeddings, k,categories=None):
+def evaluate_accuracy(has_cate,model, data, k):
     """
     Evaluate the accuracy of a given model for all data.
 
@@ -69,9 +69,9 @@ def evaluate_accuracy(has_cate,model, data, embeddings, k,categories=None):
     n_data, n_corrects = 0, 0
     for inputs, labels in data:
         if has_cate:
-            predictions = model(inputs, (embeddings,categories))
+            predictions = model(inputs)
         else:
-            predictions = model(inputs,embeddings)
+            predictions = model(inputs)
         top_k= tf.math.top_k(predictions, k, sorted=True)[1]
         compared = tf.equal(tf.expand_dims(labels, axis=1), top_k)
         corrects = tf.reduce_sum(tf.cast(compared, dtype=tf.float32), axis=1)
@@ -181,10 +181,7 @@ def main(data='../out/instances', algorithm=None, top_k=100, lr=1e-3, decay=1e-3
             trn_loss = 0
             for inputs, labels in tqdm.tqdm(trn_data, desc, trn_batches):
                 with tf.GradientTape() as tape:
-                    if has_cate:
-                        logits = model(inputs, (model.embeddings, model.categories))
-                    else:
-                        logits = model(inputs,model.embeddings)
+                    logits = model(inputs)
                     loss = tf.reduce_mean(cce(labels, logits))
                 gradients = tape.gradient(loss, model.trainable_variables)
                 optimizer.apply_gradients(zip(gradients, model.trainable_variables))
@@ -211,15 +208,10 @@ def main(data='../out/instances', algorithm=None, top_k=100, lr=1e-3, decay=1e-3
 
     trn_loss = evaluate_loss(model, trn_data)
     val_loss = evaluate_loss(model, val_data)
-
-    if has_cate:
-        trn_acc = evaluate_accuracy(True,model, trn_data, item_emb,top_k,category_table)
-        val_acc = evaluate_accuracy(True,model, val_data, item_emb,top_k,category_table)
-        test_acc = evaluate_accuracy(True,model, test_data, item_emb,top_k,category_table)
-    else:
-        trn_acc = evaluate_accuracy(False,model, trn_data, item_emb,top_k)
-        val_acc = evaluate_accuracy(False,model, val_data, item_emb,top_k)
-        test_acc = evaluate_accuracy(False,model, test_data, item_emb,top_k)
+    
+    trn_acc = evaluate_accuracy(has_cate,model, trn_data,top_k)
+    val_acc = evaluate_accuracy(has_cate,model, val_data,top_k)
+    test_acc = evaluate_accuracy(has_cate,model, test_data,top_k)
 
     out_summary = os.path.join(out, 'summary.tsv')
 

@@ -30,19 +30,6 @@ def get_sequence_length(sequence):
     used = tf.sign(tf.reduce_max(abs_seq, 2))
     return tf.reduce_sum(used, 1)
 
-
-@tf.function
-def normalize_categories(categories, axis):
-    """
-    Normalize the multi-hot category vectors based on their sums.
-
-    :param categories: a tensor that contains category vectors.
-    :param axis: the axis for adding the categories.
-    :return: the normalized category vectors.
-    """
-    categories_sum = tf.reduce_sum(categories, axis, keepdims=True)
-    return categories / tf.where(categories_sum > 0, categories_sum, 1)
-
 class BaselineModel(Model):
     """
     Base model for recommendation, which has no learnable parameters.
@@ -64,7 +51,7 @@ class BaselineModel(Model):
         self.permute=layers.Permute((2,1))
 
     @tf.function
-    def call(self, inputs, candidates):
+    def call(self, inputs):
         """
         Run forward propagation to produce outputs.
 
@@ -81,7 +68,7 @@ class BaselineModel(Model):
             out = orders[:, -1, :]
         else:
             raise ValueError(self.mode)
-        return layers.dot([out, self.permute(candidates)])
+        return layers.dot([out, self.permute(self.item_emb.get_weights()[0])])
 
 class RNN1(Model):
     """
@@ -115,7 +102,7 @@ class RNN1(Model):
         self.permute=layers.Permute((2,1))
 
     @tf.function
-    def call(self, inputs, candidates):
+    def call(self, inputs):
         """
         Run forward propagation to produce outputs.
 
@@ -127,7 +114,7 @@ class RNN1(Model):
         orders = self.lstm(orders)
         out = orders[:, -1, :]
         out = self.linear(out)
-        return layers.dot([out, self.permute(candidates)])
+        return layers.dot([out, self.permute(self.item_emb.get_weights()[0])])
 
 class RNN2(RNN1):
     """
@@ -177,9 +164,7 @@ class RNN2(RNN1):
         clicks = self._lookup_features(clicks)
         out = self._run_attention(users, orders, clicks)
         out = self.linear(out)
-
-        cands_x, cands_c = candidates
-        cands_v = self._lookup_candidates(cands_x, cands_c)
+        cands_v = self._lookup_candidates()
         return layers.dot([out, self.permute(cands_v)])
 
     @tf.function
@@ -193,13 +178,14 @@ class RNN2(RNN1):
 
         item_embs = self.item_emb(seqs)
         categories = self.cate_emb(seqs)
-        categories = normalize_categories(categories, axis=2)
+        categories_sum = tf.reduce_sum(categories, 2, keepdims=True)
+        categories = categories / tf.where(categories_sum > 0, categories_sum, 1)
         cat_embeddings = self.cat_embeddings.weights[0]
         cat_embeddings = tf.tensordot(categories, cat_embeddings, axes=[[2], [0]])
         return self._combine_embeddings(item_embs, cat_embeddings)
 
     @tf.function
-    def _lookup_candidates(self, embeddings, categories):  # N x D
+    def _lookup_candidates(self):  # N x D
         """
         Look up candidate vectors by embeddings and categories.
 
@@ -207,10 +193,11 @@ class RNN2(RNN1):
         :param categories: the categories of candidates.
         :return: the chosen vectors.
         """
-        categories = normalize_categories(categories, axis=1)
-        cat_embeddings = self.cat_embeddings.weights[0]
+        categories_sum = tf.reduce_sum(self.cate_emb.get_weights()[0], 1, keepdims=True)
+        categories = self.cate_emb.get_weights()[0] / tf.where(categories_sum > 0, categories_sum, 1)
+        cat_embeddings = self.cat_embeddings.get_weights()[0]
         cat_embeddings = layers.dot([categories, cat_embeddings])
-        return self._combine_embeddings(embeddings, cat_embeddings)
+        return self._combine_embeddings(self.item_emb.get_weights()[0], cat_embeddings)
 
     @tf.function
     def _combine_embeddings(self, embeddings, cat_embeddings):
