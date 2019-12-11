@@ -17,7 +17,7 @@ Version: 1.0.0
 import os
 
 import numpy as np
-from tensorflow.data import Dataset
+import tensorflow as tf
 
 from rec import models
 
@@ -113,5 +113,5 @@ def read_instances(path, batch_size, buffer_size=10000):
     labels = np.load(os.path.join(path, 'labels.npy'))
 
     arrays = (users, orders, clicks), labels
-    dataset = Dataset.from_tensor_slices(arrays)
+    dataset = tf.data.Dataset.from_tensor_slices(arrays)
     return dataset.shuffle(buffer_size).batch(batch_size)
