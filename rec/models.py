@@ -70,14 +70,13 @@ class BaselineModel(Model):
         :param candidates: a tuple of input tensors for candidates.
         :return: the predicted scores for all candidates.
         """
-        orders = inputs[1]
-        orders_x = self.item_emb(orders)
+        orders = self.item_emb(inputs)
 
         if self.mode == 'average':
-            out = tf.reduce_sum(orders_x, axis=1)
-            out /= tf.expand_dims(get_sequence_length(orders_x), axis=1)
+            out = tf.reduce_sum(orders, axis=1)
+            out /= tf.expand_dims(get_sequence_length(orders), axis=1)
         elif self.mode == 'last':
-            out = orders_x[:, -1, :]
+            out = orders[:, -1, :]
         else:
             raise ValueError(self.mode)
         return layers.dot([out, self.permute(candidates)])
@@ -120,10 +119,8 @@ class RNN1(Model):
         :param candidates: a tuple of input tensors for candidates.
         :return: the predicted scores for all candidates.
         """
-        _, orders, clicks = inputs
-        orders = self.item_emb(orders)
+        orders = self.item_emb(inputs)
         orders = self.lstm(orders)
-        clicks = self.item_emb(clicks)
         out = orders[:, -1, :]
         out = self.linear(out)
         return layers.dot([out, self.permute(candidates)])

@@ -135,9 +135,9 @@ def main(data='../out/instances', algorithm=None, top_k=100, lr=1e-3, decay=1e-3
     val_path = os.path.join(data, 'validation')
     test_path = os.path.join(data, 'test')
 
-    trn_data = read_instances(trn_path, batch_size)
-    val_data = read_instances(val_path, batch_size)
-    test_data = read_instances(test_path, batch_size)
+    trn_data = read_instances(trn_path, batch_size,is_exp=has_cate)
+    val_data = read_instances(val_path, batch_size,is_exp=has_cate)
+    test_data = read_instances(test_path, batch_size,is_exp=has_cate)
 
     num_users = users.shape[0]
     assert num_users is not None

@@ -98,7 +98,7 @@ def read_titles(path):
     """
     return np.load(os.path.join(path, 'titles.npy'))
 
-def read_instances(path, batch_size, buffer_size=10000):
+def read_instances(path, batch_size, buffer_size=10000,is_exp=False):
     """
     Read instances (for both training and evaluation).
 
@@ -107,11 +107,14 @@ def read_instances(path, batch_size, buffer_size=10000):
     :param buffer_size: a buffer size for shuffling.
     :return: the dataset consisting of multiple batches.
     """
-    users = np.load(os.path.join(path, 'users.npy'))
+    
     orders = np.load(os.path.join(path, 'orders.npy'))
-    clicks = np.load(os.path.join(path, 'clicks.npy'))
     labels = np.load(os.path.join(path, 'labels.npy'))
-
-    arrays = (users, orders, clicks), labels
+    if is_exp:
+        users = np.load(os.path.join(path, 'users.npy'))
+        clicks = np.load(os.path.join(path, 'clicks.npy'))
+        arrays = (users, orders, clicks), labels
+    else:
+        arrays=orders,labels
     dataset = tf.data.Dataset.from_tensor_slices(arrays)
     return dataset.shuffle(buffer_size).batch(batch_size)
