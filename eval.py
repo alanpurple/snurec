@@ -55,7 +55,7 @@ def main(algorithm=None, load=None, data='../out/instances', gpu=0, pos_cases=10
     path_out = os.path.join(load, 'predictions')
 
     titles = read_titles(path_items)
-    item_emb=np.load('../doc2vec_128_2_10epochs_table.npy')
+    item_emb=np.load('doc2vec_128_2_10epochs_table.npy')
     num_items=item_emb.shape[0]-1
     emb_len=item_emb.shape[1]
     dataset = read_instances(path_instances, batch_size=128)
