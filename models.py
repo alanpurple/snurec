@@ -15,7 +15,7 @@ rewritten by Alan Anderson (alan@wemakeprice.com)
 
 """
 import tensorflow as tf
-from tensorflow.keras import layers,activations,Model,regularizers,losses,Sequential
+from tensorflow.keras import layers,activations,Model,regularizers,losses,Sequential,initializers
 #from tensorflow.keras import backend as K
 
 @tf.function
@@ -43,10 +43,8 @@ class BaselineModel(Model):
         :param mode: the prediction mode of this model: average or last.
         """
         super().__init__()
-        self.item_emb=layers.Embedding(embeddings.shape[0],embeddings.shape[1],trainable=False)
-        # initialzie embedding matrix before setting
-        dummy=self.item_emb(0)
-        self.item_emb.set_weights([embeddings])
+        self.item_emb=layers.Embedding(embeddings.shape[0],embeddings.shape[1],
+                        embeddings_initializer=initializers.Constant(embeddings),trainable=False)
         self.mode = mode
         self.permute=layers.Permute((2,1))
 
@@ -68,7 +66,7 @@ class BaselineModel(Model):
             out = orders[:, -1, :]
         else:
             raise ValueError(self.mode)
-        return layers.dot([out, self.permute(self.item_emb.get_weights()[0])])
+        return layers.dot([out, self.permute(self.item_emb.weights[0])])
 
 class RNN1(Model):
     """
@@ -85,10 +83,9 @@ class RNN1(Model):
         :param decay: an L2 decay parameter for regularization.
         """
         super().__init__()
-        self.item_emb=layers.Embedding(embeddings.shape[0],embeddings.shape[1],mask_zero=True,trainable=False)
-        # initialzie embedding matrix before setting
-        dummy=self.item_emb(0)
-        self.item_emb.set_weights([embeddings])
+        self.item_emb=layers.Embedding(embeddings.shape[0],embeddings.shape[1],
+                        embeddings_initializer=initializers.Constant(embeddings),
+                        mask_zero=True,trainable=False)
         lstm = Sequential()
         for _ in range(num_layers):
             lstm.add(layers.LSTM(num_units, return_sequences=True,
@@ -115,7 +112,7 @@ class RNN1(Model):
         orders = self.lstm(orders,mask=mask)
         out = orders[:, -1, :]
         out = self.linear(out)
-        return layers.dot([out, self.permute(self.item_emb.get_weights()[0])])
+        return layers.dot([out, self.permute(self.item_emb.weights[0])])
 
 class RNN2(RNN1):
     """
@@ -138,10 +135,9 @@ class RNN2(RNN1):
         nx = embeddings.shape[1]
         nc = categories.shape[1]
 
-        self.cate_emb=layers.Embedding(categories.shape[0],categories.shape[1],mask_zero=True,trainable=False)
-        # initialzie embedding matrix before setting
-        dummy=self.cate_emb(0)
-        self.cate_emb.set_weights([categories])
+        self.cate_emb=layers.Embedding(categories.shape[0],categories.shape[1],
+                    embeddings_initializer=initializers.Constant(categories),
+                    mask_zero=True,trainable=False)
         self.cat_embeddings = layers.Embedding(nc, nx,embeddings_regularizer=regularizers.l2(decay),
                                 embeddings_initializer='zeros',mask_zero=True)
         self.emb_way = emb_way
@@ -194,11 +190,11 @@ class RNN2(RNN1):
         :param categories: the categories of candidates.
         :return: the chosen vectors.
         """
-        categories_sum = tf.reduce_sum(self.cate_emb.get_weights()[0], 1, keepdims=True)
-        categories = self.cate_emb.get_weights()[0] / tf.where(categories_sum > 0, categories_sum, 1)
-        cat_embeddings = self.cat_embeddings.get_weights()[0]
+        categories_sum = tf.reduce_sum(self.cate_emb.weights[0], 1, keepdims=True)
+        categories = self.cate_emb.weights[0] / tf.where(categories_sum > 0, categories_sum, 1)
+        cat_embeddings = self.cat_embeddings.weights[0]
         cat_embeddings = layers.dot([categories, cat_embeddings])
-        return self._combine_embeddings(self.item_emb.get_weights()[0], cat_embeddings)
+        return self._combine_embeddings(self.item_emb.weights[0], cat_embeddings)
 
     @tf.function
     def _combine_embeddings(self, embeddings, cat_embeddings):
