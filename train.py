@@ -141,15 +141,16 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
     # val_data = read_instances(val_path, batch_size,is_exp=has_cate)
     # test_data = read_instances(test_path, batch_size,is_exp=has_cate)
     train_df=pd.read_pickle(data+'/train_data_df.pkl.gz','gzip')
+
     val_df=pd.read_pickle(data+'/valid_data_df.pkl.gz','gzip')
     test_df=pd.read_pickle(data+'/test_data_df.pkl.gz','gzip')
 
     trn_data=tf.data.Dataset.from_generator(partial(gen,train_df),
-            (tf.int64,tf.int64),(tf.TensorShape([None]),tf.TensorShape([]))).shuffle(512).batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE)
+            (tf.int32,tf.int32),((None,),())).shuffle(512).padded_batch(batch_size,([None],[])).prefetch(tf.data.experimental.AUTOTUNE)
     val_data=tf.data.Dataset.from_generator(partial(gen,val_df),
-            (tf.int64,tf.int64),(tf.TensorShape([None]),tf.TensorShape([])))
+            (tf.int32,tf.int32),((None,),())).padded_batch(64,([None],[]))
     test_data=tf.data.Dataset.from_generator(partial(gen,test_df),
-            (tf.int64,tf.int64),(tf.TensorShape([None]),tf.TensorShape([])))
+            (tf.int32,tf.int32),((None,),())).padded_batch(64,([None],[]))
 
 
     #num_users = users.shape[0]
