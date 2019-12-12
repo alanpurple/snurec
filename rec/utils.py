@@ -13,6 +13,8 @@ File: rec/utils.py
 
 Version: 1.0.0
 
+rewritten by Alan Anderson (alan@wemakeprice.com)
+
 """
 import os
 
@@ -38,7 +40,7 @@ CATEGORY_ID = 'gnb_category_id'
 CATEGORY_IDX = 'gnb_category_idx'
 
 
-def initialize_model(name,num_items,emb_len, embeddings, categories,
+def initialize_model(name, embeddings, categories,
                     num_layers=1,num_units=128,decay=0,emb_way='mlp'):
     """
     Initialize a recommendation model based on its name.
@@ -51,29 +53,31 @@ def initialize_model(name,num_items,emb_len, embeddings, categories,
     """
 
     if name in {'last', 'average'}:
-        return models.BaselineModel(num_items,emb_len,embeddings, mode=name)
+        return models.BaselineModel(embeddings, mode=name)
     elif name == 'rnn-v1':
-        return models.RNN1(num_items,emb_len,embeddings,
+        return models.RNN1(embeddings,
                            num_layers=num_layers,
                            num_units=num_units,
                            decay=decay)
     elif name == 'rnn-v2':
-        return models.RNN2(num_items,emb_len,embeddings, categories,
+        return models.RNN2(embeddings, categories,
                            num_layers=num_layers,
                            num_units=num_units,
                            decay=decay,
                            emb_way=emb_way,
                            )
     elif name == 'rnn-v3':
-        return models.RNN3(num_items,emb_len,embeddings, categories,
+        return models.RNN3(embeddings, categories,
                            num_layers=num_layers,
                            num_units=num_units,
                            decay=decay,
                            emb_way=emb_way
                            )
     elif name == 'rnn-v4':
-        return models.RNN4(num_items,emb_len,embeddings, categories,
-                           num_layers,num_units, decay,
+        return models.RNN4(embeddings, categories,
+                           num_layers=num_layers,
+                           num_units=num_units,
+                           decay=decay,
                            emb_way=emb_way)
     else:
         raise ValueError(name)

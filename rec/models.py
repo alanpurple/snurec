@@ -11,7 +11,7 @@ File: rec/models.py
 
 Version: 1.0.0
 
-refactored by Alan Anderson (alan@wemakeprice.com)
+rewritten by Alan Anderson (alan@wemakeprice.com)
 
 """
 import tensorflow as tf
@@ -35,7 +35,7 @@ class BaselineModel(Model):
     Base model for recommendation, which has no learnable parameters.
     """
 
-    def __init__(self,num_item,item_emb_len, embeddings, mode='average'):
+    def __init__(self,embeddings, mode='average'):
         """
         Class initializer.
 
@@ -43,7 +43,7 @@ class BaselineModel(Model):
         :param mode: the prediction mode of this model: average or last.
         """
         super().__init__()
-        self.item_emb=layers.Embedding(num_item+1,item_emb_len,trainable=False)
+        self.item_emb=layers.Embedding(embeddings.shape[0],embeddings.shape[1],trainable=False)
         # initialzie embedding matrix before setting
         dummy=self.item_emb(0)
         self.item_emb.set_weights([embeddings])
@@ -75,7 +75,7 @@ class RNN1(Model):
     RNN 1 model for recommendation, which uses none of important techniques.
     """
 
-    def __init__(self,num_item,item_emb_len, embeddings, num_units=32, num_layers=1, decay=0):
+    def __init__(self, embeddings, num_units=32, num_layers=1, decay=0):
         """
         Class initializer.
 
@@ -85,7 +85,7 @@ class RNN1(Model):
         :param decay: an L2 decay parameter for regularization.
         """
         super().__init__()
-        self.item_emb=layers.Embedding(num_item+1,item_emb_len,mask_zero=True,trainable=False)
+        self.item_emb=layers.Embedding(embeddings.shape[0],embeddings.shape[1],mask_zero=True,trainable=False)
         # initialzie embedding matrix before setting
         dummy=self.item_emb(0)
         self.item_emb.set_weights([embeddings])
@@ -111,7 +111,8 @@ class RNN1(Model):
         :return: the predicted scores for all candidates.
         """
         orders = self.item_emb(inputs)
-        orders = self.lstm(orders)
+        mask=self.item_emb.compute_mask(inputs)
+        orders = self.lstm(orders,mask=mask)
         out = orders[:, -1, :]
         out = self.linear(out)
         return layers.dot([out, self.permute(self.item_emb.get_weights()[0])])
@@ -120,7 +121,7 @@ class RNN2(RNN1):
     """
     RNN 2 model for recommendation, which uses category information.
     """
-    def __init__(self,num_item,item_emb_len, embeddings, categories, num_units=32,
+    def __init__(self, embeddings, categories, num_units=32,
                  num_layers=1, decay=0, emb_way='mean'):
         """
         Class initializer.
@@ -132,7 +133,7 @@ class RNN2(RNN1):
         :param num_layers: the number of LSTM layers.
         :param decay: an L2 decay parameter for regularization.
         """
-        super().__init__(num_item,item_emb_len,embeddings, num_units, num_layers, decay)
+        super().__init__(embeddings, num_units, num_layers, decay)
 
         nx = embeddings.shape[1]
         nc = categories.shape[1]
@@ -150,7 +151,7 @@ class RNN2(RNN1):
         self.softmax=layers.Softmax(1)
 
     @tf.function
-    def call(self, inputs, candidates):
+    def call(self, inputs):
         """
         Run forward propagation to produce outputs.
 
@@ -185,7 +186,7 @@ class RNN2(RNN1):
         return self._combine_embeddings(item_embs, cat_embeddings)
 
     @tf.function
-    def _lookup_candidates(self):  # N x D
+    def _lookup_candidates(self):
         """
         Look up candidate vectors by embeddings and categories.
 
@@ -257,7 +258,7 @@ class RNN4(RNN2):
     RNN 3 model for recommendation, which uses clicks for attention keys.
     """
 
-    def __init__(self,num_item,item_emb_len, embeddings, categories, num_layers, num_units, decay,emb_way):
+    def __init__(self, embeddings, categories, num_layers, num_units, decay,emb_way):
         """
         Class initializer.
 
@@ -267,7 +268,7 @@ class RNN4(RNN2):
         :param num_units: the number of hidden units in each LSTM cell.
         :param decay: an L2 decay parameter for regularization.
         """
-        super().__init__(num_item,item_emb_len,embeddings, categories, num_layers=num_layers, num_units=num_units)
+        super().__init__(embeddings, categories, num_layers=num_layers, num_units=num_units)
         self.lstm_click = Sequential()
         for _ in range(num_layers):
             self.lstm_click.add(

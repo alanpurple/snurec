@@ -13,16 +13,20 @@ File: rec/train.py
 
 Version: 1.0.0
 
+rewritten by Alan Anderson (alan@wemakeprice.com)
+
 """
 import time
-
+from functools import partial
+import os
 import click
 import tqdm
 
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 from tensorflow.keras import optimizers,losses
-from rec.utils import *
+from rec.utils import read_instances,read_titles,read_users,initialize_model
 
 
 def count_batches(dataset):
@@ -49,7 +53,7 @@ def evaluate_loss(model, data):
     loss, batches = 0, 0
     for inputs, labels in data:
         logits = model(inputs)
-        cce=losses.SparseCategoricalCrossentropy()
+        cce=losses.SparseCategoricalCrossentropy(True)
         loss+= tf.reduce_mean(cce(labels, logits))
         batches+=1
     return loss / batches
@@ -80,10 +84,13 @@ def evaluate_accuracy(has_cate,model, data, k):
         n_corrects += accuracy.numpy().item() * labels.shape[0]
     return n_corrects * 100 / n_data
 
+def gen(df):
+    for _,row in df.iterrows():
+        yield row.x[:,0],row.label
 
 @click.command()
-@click.option('--algorithm', '-a', type=str, default=None)
-@click.option('--data', type=click.Path(), default='../out/instances')
+@click.option('--algorithm', '-a', type=str, default='rnn-v1')
+@click.option('--data', type=click.Path(), default='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2')
 @click.option('--top-k', type=int, default=10)
 @click.option('--num-epochs', type=int, default=1000)
 @click.option('--num-units', type=int, default=None)
@@ -93,11 +100,11 @@ def evaluate_accuracy(has_cate,model, data, k):
 @click.option('--decay', type=float, default=1e-3)
 @click.option('--batch-size', type=int, default=256)
 @click.option('--patience', type=int, default=2)  # 10 is recommended for 2W.
-@click.option('--gpu', type=int, default=0)
-@click.option('--out', type=str, default=None)
-def main(data='../out/instances', algorithm=None, top_k=100, lr=1e-3, decay=1e-3,
+@click.option('--out', type=str, default='.')
+def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
+         algorithm='rnn-v1', top_k=100, lr=1e-3, decay=1e-3,
          num_epochs=1000, num_units=None, num_layers=None,
-         emb_way=None, batch_size=256, patience=2, gpu=0, out=None):
+         emb_way=None, batch_size=256, patience=2, out='.'):
     """
     Train a recommendation model.
 
@@ -112,7 +119,6 @@ def main(data='../out/instances', algorithm=None, top_k=100, lr=1e-3, decay=1e-3
     :param emb_way: how to generate embedding vectors of items.
     :param batch_size: a batch size.
     :param patience: the number of epochs to wait until the termination.
-    :param gpu: a list of GPUs to use in the training.
     :param out: the path to store the outputs.
     :return: None.
     """
@@ -120,41 +126,46 @@ def main(data='../out/instances', algorithm=None, top_k=100, lr=1e-3, decay=1e-3
 
     start_time = time.time()
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu)
-
-    users = read_users(os.path.join(data, 'users'))
+    #users = read_users(os.path.join(data, 'users'))
     item_emb=np.load('../doc2vec_128_2_10epochs_table.npy')
-    num_items=item_emb.shape[0]-1
-    emb_len=item_emb.shape[1]
     has_cate=False
     if algorithm=='rnn-v2' or algorithm=='rnn-v3' or algorithm=='rnn-v4':
         has_cate=True
         category_table=np.load('./cate.npy')
 
-    trn_path = os.path.join(data, 'training')
-    val_path = os.path.join(data, 'validation')
-    test_path = os.path.join(data, 'test')
+    # trn_path = os.path.join(data, 'training')
+    # val_path = os.path.join(data, 'validation')
+    # test_path = os.path.join(data, 'test')
 
-    trn_data = read_instances(trn_path, batch_size,is_exp=has_cate)
-    val_data = read_instances(val_path, batch_size,is_exp=has_cate)
-    test_data = read_instances(test_path, batch_size,is_exp=has_cate)
+    # trn_data = read_instances(trn_path, batch_size,is_exp=has_cate)
+    # val_data = read_instances(val_path, batch_size,is_exp=has_cate)
+    # test_data = read_instances(test_path, batch_size,is_exp=has_cate)
+    train_df=pd.read_pickle(data+'/train_data_df.pkl.gz','gzip')
+    val_df=pd.read_pickle(data+'/valid_data_df.pkl.gz','gzip')
+    test_df=pd.read_pickle(data+'/test_data_df.pkl.gz','gzip')
 
-    num_users = users.shape[0]
-    assert num_users is not None
+    trn_data=tf.data.Dataset.from_generator(partial(gen,train_df),
+            (tf.int64,tf.int64),(tf.TensorShape([None]),tf.TensorShape([]))).shuffle(512).batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE)
+    val_data=tf.data.Dataset.from_generator(partial(gen,val_df),
+            (tf.int64,tf.int64),(tf.TensorShape([None]),tf.TensorShape([])))
+    test_data=tf.data.Dataset.from_generator(partial(gen,test_df),
+            (tf.int64,tf.int64),(tf.TensorShape([None]),tf.TensorShape([])))
+
+
+    #num_users = users.shape[0]
+    #assert num_users is not None
     if emb_way is None:
         emb_way='mean'
     if has_cate:
         model = initialize_model(
-            algorithm,
-            num_items,emb_len,item_emb,
+            algorithm,item_emb,
             category_table,
             num_layers,num_units,
             decay=decay,
             emb_way=emb_way)
     else:
         model = initialize_model(
-            algorithm,
-            num_items,emb_len,item_emb,
+            algorithm,item_emb,
             num_layers,num_units,
             decay=decay,
             emb_way=emb_way)
@@ -171,7 +182,7 @@ def main(data='../out/instances', algorithm=None, top_k=100, lr=1e-3, decay=1e-3
     os.makedirs(os.path.join(out, 'model'), exist_ok=True)
     optimizer = optimizers.Adam(learning_rate=lr)
 
-    cce=losses.SparseCategoricalCrossentropy()
+    cce=losses.SparseCategoricalCrossentropy(True)
 
     for epoch in range(num_epochs + 1):
         if epoch == 0:
@@ -208,7 +219,7 @@ def main(data='../out/instances', algorithm=None, top_k=100, lr=1e-3, decay=1e-3
 
     trn_loss = evaluate_loss(model, trn_data)
     val_loss = evaluate_loss(model, val_data)
-    
+
     trn_acc = evaluate_accuracy(has_cate,model, trn_data,top_k)
     val_acc = evaluate_accuracy(has_cate,model, val_data,top_k)
     test_acc = evaluate_accuracy(has_cate,model, test_data,top_k)

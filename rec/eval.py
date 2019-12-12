@@ -13,13 +13,16 @@ File: rec/eval.py
 
 Version: 1.0.0
 
+rewritten by Alan Anderson (alan@wemakeprice.com)
+
 """
 import click
+import os
 import tensorflow as tf
 from tensorflow.keras import Model
 import numpy as np
 from rec import models
-from rec.utils import *
+from rec.utils import read_instances,read_titles,initialize_model
 
 @click.command()
 @click.option('--algorithm', '-a', type=str, default=None)
@@ -55,8 +58,6 @@ def main(algorithm=None, load=None, data='../out/instances', gpu=0, pos_cases=10
     item_emb=np.load('../doc2vec_128_2_10epochs_table.npy')
     num_items=item_emb.shape[0]-1
     emb_len=item_emb.shape[1]
-    if algorithm=='rnn-v2' or algorithm=='rnn-v3' or algorithm=='rnn-v4':
-        category_table=np.load('./cate.npy')
     dataset = read_instances(path_instances, batch_size=128)
 
     # model = initialize_model(algorithm, *candidates)
@@ -65,7 +66,7 @@ def main(algorithm=None, load=None, data='../out/instances', gpu=0, pos_cases=10
     if algorithm[:3]=='rnn':
         model = Model.load(os.path.join(load, 'model/model.tf'))
     elif algorithm in {'last', 'average'}:
-        model = models.BaselineModel(num_items,emb_len,item_emb, mode=algorithm)
+        model = models.BaselineModel(item_emb, mode=algorithm)
     else:
         raise Exception('unknown algorithm')
 
