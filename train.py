@@ -50,10 +50,10 @@ def evaluate_loss(model, data):
     :param data: the dataset of multiple batches.
     :return: the calculated loss.
     """
+    cce=losses.SparseCategoricalCrossentropy(True)
     loss, batches = 0, 0
     for inputs, labels in data:
         logits = model(inputs)
-        cce=losses.SparseCategoricalCrossentropy(True)
         loss+= tf.reduce_mean(cce(labels, logits))
         batches+=1
     return loss / batches
@@ -92,7 +92,7 @@ def gen(df):
 @click.option('--algorithm', '-a', type=str, default='rnn-v1')
 @click.option('--data', type=click.Path(), default='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2')
 @click.option('--top-k', type=int, default=10)
-@click.option('--num-epochs', type=int, default=1000)
+@click.option('--num-epochs', type=int, default=30)
 @click.option('--num-units', type=int, default=None)
 @click.option('--num-layers', type=int, default=2)
 @click.option('--emb-way', type=str, default=None)
@@ -103,7 +103,7 @@ def gen(df):
 @click.option('--out', type=str, default='.')
 def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
          algorithm='rnn-v1', top_k=100, lr=1e-3, decay=1e-3,
-         num_epochs=1000, num_units=None, num_layers=2,
+         num_epochs=30, num_units=None, num_layers=2,
          emb_way=None, batch_size=256, patience=2, out='.'):
     """
     Train a recommendation model.

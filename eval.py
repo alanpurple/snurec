@@ -28,7 +28,6 @@ from utils import read_instances,read_titles,initialize_model
 @click.option('--algorithm', '-a', type=str, default=None)
 @click.option('--load', '-l', type=click.Path(), default=None)
 @click.option('--data', type=click.Path(), default='../out/instances')
-@click.option('--gpu', type=int, default=0)
 @click.option('--pos-cases', type=int, default=100)
 @click.option('--neg-cases', type=int, default=10000)
 @click.option('--top-k', type=int, default=10)
@@ -47,8 +46,6 @@ def main(algorithm=None, load=None, data='../out/instances', gpu=0, pos_cases=10
     """
     assert algorithm in {'last', 'average'} or algorithm[:3]=='rnn'
     assert load is not None
-
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu)
 
     path_items = os.path.join(data, 'items')
     path_instances = os.path.join(data, 'test')
