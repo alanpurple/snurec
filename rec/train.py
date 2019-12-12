@@ -26,7 +26,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from tensorflow.keras import optimizers,losses
-from rec.utils import read_instances,read_titles,read_users,initialize_model
+from .utils import read_instances,read_titles,read_users,initialize_model
 
 
 def count_batches(dataset):

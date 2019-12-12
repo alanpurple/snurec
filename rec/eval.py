@@ -21,8 +21,8 @@ import os
 import tensorflow as tf
 from tensorflow.keras import Model
 import numpy as np
-from rec import models
-from rec.utils import read_instances,read_titles,initialize_model
+from . import models
+from .utils import read_instances,read_titles,initialize_model
 
 @click.command()
 @click.option('--algorithm', '-a', type=str, default=None)
