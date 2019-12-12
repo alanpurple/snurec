@@ -166,6 +166,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
     else:
         model = initialize_model(
             algorithm,item_emb,
+            None,
             num_layers,num_units,
             decay=decay,
             emb_way=emb_way)
