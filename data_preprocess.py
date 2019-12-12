@@ -20,7 +20,7 @@ import click
 import pandas as pd
 import tqdm
 
-from rec.utils import *
+from utils import *
 
 # Global variables for efficient programming.
 MIN_ORDERS = None  # determined at main()

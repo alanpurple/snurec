@@ -21,7 +21,7 @@ import os
 import numpy as np
 import tensorflow as tf
 
-from . import models
+import models
 
 # Information to access a HDFS.
 HOST = 'matisse.snu.ac.kr'

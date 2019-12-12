@@ -20,7 +20,7 @@ import pandas as pd
 import paramiko
 import tqdm
 
-from rec.utils import *
+from utils import *
 
 
 def read_data_from_hdfs(in_path):

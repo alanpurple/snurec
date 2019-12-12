@@ -20,7 +20,7 @@ import numpy as np
 from gensim.models.doc2vec import Doc2Vec, TaggedDocument
 from konlpy.tag import Okt
 
-from rec.utils import *
+from utils import *
 
 
 def to_documents(df):
