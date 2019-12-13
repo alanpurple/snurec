@@ -51,11 +51,11 @@ def evaluate_loss(model, data):
     :return: the calculated loss.
     """
     cce=losses.SparseCategoricalCrossentropy(True)
-    loss, batches = 0., 0
+    loss, batches = 0., 0.
     for inputs, labels in data:
         logits = model(inputs)
         loss+= tf.reduce_mean(cce(labels, logits))
-        batches+=1
+        batches+=1.
     return loss / batches
 
 
