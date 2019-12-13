@@ -51,7 +51,7 @@ def evaluate_loss(model, data):
     :return: the calculated loss.
     """
     cce=losses.SparseCategoricalCrossentropy(True)
-    loss, batches = 0, 0
+    loss, batches = 0., 0
     for inputs, labels in data:
         logits = model(inputs)
         loss+= tf.reduce_mean(cce(labels, logits))
@@ -191,7 +191,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
             trn_loss = evaluate_loss(model, trn_data)
         else:
             desc = f'Epoch {epoch}'
-            trn_loss = 0
+            trn_loss = 0.
             for inputs, labels in tqdm.tqdm(trn_data, desc, trn_batches):
                 with tf.GradientTape() as tape:
                     logits = model(inputs)

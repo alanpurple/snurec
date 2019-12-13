@@ -21,7 +21,7 @@ import os
 import tensorflow as tf
 from tensorflow.keras import Model
 import numpy as np
-from . import models
+import models
 from utils import read_instances,read_titles,initialize_model
 
 @click.command()
