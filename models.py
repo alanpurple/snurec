@@ -16,7 +16,7 @@ rewritten by Alan Anderson (alan@wemakeprice.com)
 """
 import tensorflow as tf
 from tensorflow.keras import layers,activations,Model,regularizers,losses,Sequential,initializers
-#from tensorflow.keras import backend as K
+from tensorflow.keras import backend as K
 
 @tf.function
 def get_sequence_length(sequence):
@@ -46,7 +46,6 @@ class BaselineModel(Model):
         self.item_emb=layers.Embedding(embeddings.shape[0],embeddings.shape[1],
                         embeddings_initializer=initializers.Constant(embeddings),trainable=False)
         self.mode = mode
-        self.permute=layers.Permute((2,1))
 
     @tf.function
     def call(self, inputs):
@@ -66,7 +65,7 @@ class BaselineModel(Model):
             out = orders[:, -1, :]
         else:
             raise ValueError(self.mode)
-        return layers.dot([out, self.permute(self.item_emb.weights[0])])
+        return K.dot(out,K.transpose(self.item_emb.weights[0]))
 
 class RNN1(Model):
     """
@@ -96,7 +95,6 @@ class RNN1(Model):
         self.linear = layers.Dense(embeddings.shape[1], kernel_regularizer=regularizers.l2(decay),
                                     bias_regularizer=regularizers.l2(decay))
         self.softmax_bias = tf.zeros(embeddings.shape[0])
-        self.permute=layers.Permute((2,1))
 
     @tf.function
     def call(self, inputs):
@@ -107,12 +105,16 @@ class RNN1(Model):
         :param candidates: a tuple of input tensors for candidates.
         :return: the predicted scores for all candidates.
         """
+        # B X T X E
         orders = self.item_emb(inputs)
         mask=self.item_emb.compute_mask(inputs)
+        # B X T X U
         orders = self.lstm(orders,mask=mask)
+        # B X U
         out = orders[:, -1, :]
+        # out: B x E
         out = self.linear(out)
-        return layers.dot([out, self.permute(self.item_emb.weights[0])])
+        return  K.dot(out,K.transpose(self.item_emb.weights[0]))
 
 class RNN2(RNN1):
     """
@@ -162,7 +164,7 @@ class RNN2(RNN1):
         out = self._run_attention(users, orders, clicks)
         out = self.linear(out)
         cands_v = self._lookup_candidates()
-        return layers.dot([out, self.permute(cands_v)])
+        return K.dot(out,K.transpose(cands_v))
 
     @tf.function
     def _lookup_features(self, seqs):
