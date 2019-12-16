@@ -213,6 +213,9 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
                 f.write('BEST')
             f.write('\n')
 
+        if epoch>0 and epoch%2==0:
+            model.save(os.path.join(out,'model/model_epoch{}.tf'.format(epoch)))
+
         if epoch >= best_epoch + patience:
             break
 
