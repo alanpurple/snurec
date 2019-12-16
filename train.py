@@ -92,7 +92,7 @@ def gen(df):
 @click.option('--algorithm', '-a', type=str, default='rnn-v1')
 @click.option('--data', type=click.Path(), default='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2')
 @click.option('--top-k', type=int, default=10)
-@click.option('--num-epochs', type=int, default=30)
+@click.option('--num-epochs', type=int, default=10)
 @click.option('--num-units', type=int, default=32)
 @click.option('--num-layers', type=int, default=2)
 @click.option('--emb-way', type=str, default=None)
@@ -103,7 +103,7 @@ def gen(df):
 @click.option('--out', type=str, default='.')
 def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
          algorithm='rnn-v1', top_k=100, lr=1e-3, decay=1e-3,
-         num_epochs=30, num_units=32, num_layers=2,
+         num_epochs=10, num_units=32, num_layers=2,
          emb_way=None, batch_size=256, patience=2, out='.'):
     """
     Train a recommendation model.
