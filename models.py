@@ -18,61 +18,12 @@ import tensorflow as tf
 from tensorflow.keras import layers,activations,Model,regularizers,losses,Sequential,initializers
 from tensorflow.keras import backend as K
 
-@tf.function
-def get_sequence_length(sequence):
-    """
-    Calculate the valid length of a sequence (ignoring zeros).
-
-    :param sequence: the sequence.
-    :return: the valid length of the sequence.
-    """
-    abs_seq = tf.abs(sequence)
-    used = tf.sign(tf.reduce_max(abs_seq, 2))
-    return tf.reduce_sum(used, 1)
-
-class BaselineModel(Model):
-    """
-    Base model for recommendation, which has no learnable parameters.
-    """
-
-    def __init__(self,embeddings, mode='average'):
-        """
-        Class initializer.
-
-        :param embeddings: embedding vectors of all items.
-        :param mode: the prediction mode of this model: average or last.
-        """
-        super().__init__()
-        self.item_emb=layers.Embedding(embeddings.shape[0],embeddings.shape[1],
-                        embeddings_initializer=initializers.Constant(embeddings),trainable=False)
-        self.mode = mode
-
-    @tf.function
-    def call(self, inputs):
-        """
-        Run forward propagation to produce outputs.
-
-        :param inputs: a tuple of input tensors for predictions.
-        :param candidates: a tuple of input tensors for candidates.
-        :return: the predicted scores for all candidates.
-        """
-        orders = self.item_emb(inputs)
-
-        if self.mode == 'average':
-            out = tf.reduce_sum(orders, axis=1)
-            out /= tf.expand_dims(get_sequence_length(orders), axis=1)
-        elif self.mode == 'last':
-            out = orders[:, -1, :]
-        else:
-            raise ValueError(self.mode)
-        return K.dot(out,K.transpose(self.item_emb.weights[0]))
-
 class RNN1(Model):
     """
     RNN 1 model for recommendation, which uses none of important techniques.
     """
 
-    def __init__(self, embeddings, num_units=32, num_layers=1, decay=0):
+    def __init__(self,emb_size, num_units=32, num_layers=1, decay=0):
         """
         Class initializer.
 
@@ -82,19 +33,20 @@ class RNN1(Model):
         :param decay: an L2 decay parameter for regularization.
         """
         super().__init__()
-        self.item_emb=layers.Embedding(embeddings.shape[0],embeddings.shape[1],
-                        embeddings_initializer=initializers.Constant(embeddings),
-                        mask_zero=True,trainable=False)
-        lstm = Sequential()
-        for _ in range(num_layers):
-            lstm.add(layers.LSTM(num_units, return_sequences=True,
+        if num_layers<2:
+            self.lstm=layers.LSTM(num_units, return_sequences=True,
                                 kernel_regularizer=regularizers.l2(decay),
                                 bias_regularizer=regularizers.l2(decay),
-                                activation='sigmoid'))
-        self.lstm=lstm
-        self.linear = layers.Dense(embeddings.shape[1], kernel_regularizer=regularizers.l2(decay),
-                                    bias_regularizer=regularizers.l2(decay))
-        self.softmax_bias = tf.zeros(embeddings.shape[0])
+                                activation='sigmoid',name='lstm')
+        else:
+            self.lstm=[layers.LSTM(num_units, return_sequences=True,
+                                kernel_regularizer=regularizers.l2(decay),
+                                bias_regularizer=regularizers.l2(decay),
+                                activation='sigmoid',name='lstm{}'.format(i))
+                                for i in range(num_layers)]
+
+        self.dense_final = layers.Dense(emb_size, kernel_regularizer=regularizers.l2(decay),
+                                    bias_regularizer=regularizers.l2(decay),name='dense_final')
 
     @tf.function
     def call(self, inputs):
@@ -106,46 +58,36 @@ class RNN1(Model):
         :return: the predicted scores for all candidates.
         """
         # B X T X E
-        orders = self.item_emb(inputs)
-        mask=self.item_emb.compute_mask(inputs)
+        orders = inputs['items']
+        mask=inputs['mask']
         # B X T X U
-        orders = self.lstm(orders,mask=mask)
+        if not isinstance(self.lstm, list):
+            orders = self.lstm(orders,mask=mask)
+        else:
+            for lstm in self.lstm:
+                orders=lstm(orders,mask=mask)
         # B X U
         out = orders[:, -1, :]
         # out: B x E
-        out = self.linear(out)
-        return  K.dot(out,K.transpose(self.item_emb.weights[0]))
+        return self.linear(out)
 
 class RNN2(RNN1):
     """
     RNN 2 model for recommendation, which uses category information.
     """
-    def __init__(self, embeddings, categories, num_units=32,
-                 num_layers=1, decay=0, emb_way='mean'):
+    def __init__(self, emb_size, num_units=32,
+                 num_layers=1, decay=0):
         """
         Class initializer.
 
-        :param embeddings: embedding vectors of all items.
-        :param categories: multi-hot categories of all items.
-        :param emb_way: how to get embedding vectors of items.
         :param num_units: the number of hidden units in each LSTM cell.
         :param num_layers: the number of LSTM layers.
         :param decay: an L2 decay parameter for regularization.
         """
-        super().__init__(embeddings, num_units, num_layers, decay)
+        super().__init__(emb_size,num_units, num_layers, decay)
 
-        nx = embeddings.shape[1]
-        nc = categories.shape[1]
-
-        self.cate_emb=layers.Embedding(categories.shape[0],categories.shape[1],
-                    embeddings_initializer=initializers.Constant(categories),
-                    mask_zero=True,trainable=False)
-        self.cat_embeddings = layers.Embedding(nc, nx,embeddings_regularizer=regularizers.l2(decay),
-                                embeddings_initializer='zeros',mask_zero=True)
-        self.emb_way = emb_way
-        if emb_way == 'mlp':
-            self.emb_layer = layers.Dense(nx,'tanh')
-
+        self.order_dense = layers.Dense(emb_size,name='order_dense')
+        self.click_dens=layers.Dense(emb_size,name='click_dense')
         self.softmax=layers.Softmax(1)
 
     @tf.function
@@ -157,75 +99,52 @@ class RNN2(RNN1):
         :param candidates: a tuple of input tensors for candidates.
         :return: the predicted scores for all candidates.
         """
-        users, orders, clicks = inputs
-        orders = self._lookup_features(orders)
-        orders = self.lstm(orders)
-        clicks = self._lookup_features(clicks)
-        out = self._run_attention(users, orders, clicks)
-        out = self.linear(out)
-        cands_v = self._lookup_candidates()
-        return K.dot(out,K.transpose(cands_v))
+        orders=layers.concatenate([inputs['items'],inputs['cate']])
+        orders=self.order_dense(orders)
+        orders = self.lstm(orders,mask=inputs['mask'])
+        clicks=layers.concatenate([inputs['clicks'],inputs['clicks_cate']])
+        clicks = self.click_dense(clicks)
+        out = self._run_attention(orders, clicks,inputs['clicks_mask'])
+        return self.dense_final(out)
+        #cands_v = self._lookup_candidates()
 
     @tf.function
-    def _lookup_features(self, seqs):
+    def _lookup_features(self, item_embs,cat_embs):
         """
         Look up the feature vectors of all items in sequences.
 
         :param seqs: the behavioral sequences for predictions.
         :return: the feature vectors.
         """
+        categories_sum = tf.reduce_sum(cat_embs, 2, keepdims=True)
+        categories = cat_embs / tf.where(categories_sum > 0, categories_sum, 1)
+        cat_embeddings = self.cat_dense(categories)
+        return layers.average([item_embs, cat_embeddings])
 
-        item_embs = self.item_emb(seqs)
-        categories = self.cate_emb(seqs)
-        categories_sum = tf.reduce_sum(categories, 2, keepdims=True)
-        categories = categories / tf.where(categories_sum > 0, categories_sum, 1)
-        cat_embeddings = self.cat_embeddings.weights[0]
-        cat_embeddings = tf.tensordot(categories, cat_embeddings, axes=[[2], [0]])
-        return self._combine_embeddings(item_embs, cat_embeddings)
+    # @tf.function
+    # def _lookup_candidates(self,item_embs,cate_embs):
+    #     """
+    #     Look up candidate vectors by embeddings and categories.
 
-    @tf.function
-    def _lookup_candidates(self):
-        """
-        Look up candidate vectors by embeddings and categories.
-
-        :param embeddings: the embeddings of candidates.
-        :param categories: the categories of candidates.
-        :return: the chosen vectors.
-        """
-        categories_sum = tf.reduce_sum(self.cate_emb.weights[0], 1, keepdims=True)
-        categories = self.cate_emb.weights[0] / tf.where(categories_sum > 0, categories_sum, 1)
-        cat_embeddings = self.cat_embeddings.weights[0]
-        cat_embeddings = layers.dot([categories, cat_embeddings])
-        return self._combine_embeddings(self.item_emb.weights[0], cat_embeddings)
+    #     :param embeddings: the embeddings of candidates.
+    #     :param categories: the categories of candidates.
+    #     :return: the chosen vectors.
+    #     """
+    #     categories_sum = tf.reduce_sum(cate_embs, 1, keepdims=True)
+    #     categories = cate_embs / tf.where(categories_sum > 0, categories_sum, 1)
+    #     cat_dense=self.cat_dense(categories)
+    #     return layers.average([self.item_emb.weights[0], cat_dense])
 
     @tf.function
-    def _combine_embeddings(self, embeddings, cat_embeddings):
-        """
-        Combine vectors of titles and categories to get representations.
-
-        :param embeddings: embedding vectors learned for titles.
-        :param cat_embeddings: embedding vectors for categories.
-        :return: the final representations of items.
-        """
-        if self.emb_way == 'mean':
-            return layers.average([embeddings, cat_embeddings])
-        elif self.emb_way == 'mlp':
-            out = layers.concatenate([embeddings, cat_embeddings], axis=-1)
-            return self.emb_layer(out)
-        else:
-            raise ValueError()
-
-    @tf.function
-    def _run_attention(self, users, vec_orders, vec_clicks):
+    def _run_attention(self,orders,clicks,clicks_mask):
         """
         Run an attention mechanism for getting an output.
 
-        :param users: users in the given inputs.
         :param vec_orders: the output (hidden) vectors of orders.
         :param vec_clicks: the output (hidden) vectors of clicks.
         :return: the chosen vector.
         """
-        return vec_orders[:, -1, :]
+        return orders[:, -1, :]
 
 
 class RNN3(RNN2):
@@ -234,20 +153,19 @@ class RNN3(RNN2):
     """
 
     @tf.function
-    def _run_attention(self, users, vec_orders, vec_clicks):
+    def _run_attention(self, orders, clicks,clicks_mask):
         """
         Run an attention mechanism for getting an output.
 
-        :param users: users in the given inputs.
         :param vec_orders: the output (hidden) vectors of orders.
         :param vec_clicks: the output (hidden) vectors of clicks.
         :return: the chosen vector.
         """
-        out_last = vec_orders[:, -1, :]  # the last hidden vector
-        tiled = tf.tile(tf.expand_dims(out_last, 1), [1, vec_orders.shape[1], 1])
-        scores = tf.reduce_sum(tf.multiply(vec_orders, tiled), axis=2, keepdims=True)
+        out_last = orders[:, -1, :]  # the last hidden vector
+        tiled = tf.tile(tf.expand_dims(out_last, 1), [1, orders.shape[1], 1])
+        scores = tf.reduce_sum(tf.multiply(orders, tiled), axis=2, keepdims=True)
         scores = self.softmax(scores)
-        out = tf.reduce_sum(vec_orders * scores, axis=1)  # context vector
+        out = tf.reduce_sum(orders * scores, axis=1)  # context vector
         return layers.concatenate([out, out_last], axis=1)
 
 
@@ -256,7 +174,7 @@ class RNN4(RNN2):
     RNN 3 model for recommendation, which uses clicks for attention keys.
     """
 
-    def __init__(self, embeddings, categories, num_layers, num_units, decay,emb_way):
+    def __init__(self, emb_size, num_layers, num_units, decay):
         """
         Class initializer.
 
@@ -266,33 +184,43 @@ class RNN4(RNN2):
         :param num_units: the number of hidden units in each LSTM cell.
         :param decay: an L2 decay parameter for regularization.
         """
-        super().__init__(embeddings, categories, num_layers=num_layers, num_units=num_units)
+        super().__init__(emb_size, num_layers=num_layers, num_units=num_units)
         self.lstm_click = Sequential()
-        for _ in range(num_layers):
-            self.lstm_click.add(
+        if num_layers<2:
+            self.lstm_click=layers.Bidirectional(layers.LSTM(num_units, return_sequences=True,
+                                                 kernel_regularizer=regularizers.l2(decay),
+                                                 bias_regularizer=regularizers.l2(decay),
+                                                 activation='sigmoid',name='lstm_click'))
+        else:
+            self.lstm_click=[
                 layers.Bidirectional(layers.LSTM(num_units, return_sequences=True,
                                                  kernel_regularizer=regularizers.l2(decay),
                                                  bias_regularizer=regularizers.l2(decay),
-                                                 activation='sigmoid')))
+                                                 activation='sigmoid',name='lstm_click{}'.format(i)))
+                            for i in range(num_layers)]
         self.linear_click = layers.Dense(num_units,
                                          kernel_regularizer=regularizers.l2(decay),
-                                         bias_regularizer=regularizers.l2(decay))
+                                         bias_regularizer=regularizers.l2(decay),name='linear_click')
 
     @tf.function
-    def _run_attention(self, x_user, vec_orders, vec_clicks):
+    def _run_attention(self, orders, clicks,click_mask):
         """
         Run an attention mechanism for getting an output.
 
-        :param x_user: users in the given inputs.
         :param vec_orders: the output (hidden) vectors of orders.
         :param vec_clicks: the output (hidden) vectors of clicks.
         :return: the chosen vector.
         """
-        out = self.lstm_click(vec_clicks)
+        if not isinstance(self.lstm_click,list):
+            out = self.lstm_click(clicks,mask=click_mask)
+        else:
+            out=clicks
+            for layer in self.lstm_click:
+                out=layer(out,mask=click_mask)
         out_last = out[:, -1, :]
         key = self.linear_click(out_last)
-        tiled = tf.tile(tf.expand_dims(key, 1), [1, vec_orders.shape[1], 1])
-        scores = tf.reduce_sum(tf.multiply(vec_orders, tiled), axis=2, keepdims=True)
+        tiled = tf.tile(tf.expand_dims(key, 1), [1, orders.shape[1], 1])
+        scores = tf.reduce_sum(tf.multiply(orders, tiled), axis=2, keepdims=True)
         scores = self.softmax(scores)
-        out = tf.reduce_sum(vec_orders * scores, axis=1)  # context vector
-        return layers.concatenate([out, vec_orders[:, -1, :]], axis=1)
+        out = tf.reduce_sum(orders * scores, axis=1)  # context vector
+        return layers.concatenate([out, orders[:, -1, :]], axis=1)

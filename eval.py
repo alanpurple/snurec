@@ -19,10 +19,23 @@ rewritten by Alan Anderson (alan@wemakeprice.com)
 import click
 import os
 import tensorflow as tf
-from tensorflow.keras import Model
+from tensorflow.keras import Model,layers,initializers
+from tensorflow.keras.models import load_model
 import numpy as np
 import models
 from utils import read_instances,read_titles,initialize_model
+
+@tf.function
+def get_sequence_length(sequence):
+    """
+    Calculate the valid length of a sequence (ignoring zeros).
+
+    :param sequence: the sequence.
+    :return: the valid length of the sequence.
+    """
+    abs_seq = tf.abs(sequence)
+    used = tf.sign(tf.reduce_max(abs_seq, 2))
+    return tf.reduce_sum(used, 1)
 
 @click.command()
 @click.option('--algorithm', '-a', type=str, default=None)
@@ -53,30 +66,62 @@ def main(algorithm=None, load=None, data='../out/instances', gpu=0, pos_cases=10
 
     titles = read_titles(path_items)
     item_emb=np.load('doc2vec_128_2_10epochs_table.npy')
+    emb_size=item_emb.shape[1]
+    item_emb_layer=layers.Embedding(item_emb.shape[0],emb_size,
+                        embeddings_initializer=initializers.Constant(item_emb),
+                        mask_zero=True,trainable=False,name='item_emb')
+    has_cate=False
     if algorithm=='rnn-v2' or algorithm=='rnn-v3' or algorithm=='rnn-v4':
         has_cate=True
         category_table=np.load('./cate.npy')
+        cate_emb_layer=layers.Embedding(category_table.shape[0],category_table.shape[1],
+                    embeddings_initializer=initializers.Constant(category_table),
+                    mask_zero=True,trainable=False,name='cate_emb')
     dataset = read_instances(path_instances, batch_size=128)
 
-    # model = initialize_model(algorithm, *candidates)
-    # if model.is_trainable:
-    #     model.load_weights(os.path.join(load, 'model/model'))
-    if algorithm[:3]=='rnn':
-        #model = Model.load(os.path.join(load, 'model/model.tf'))
-        if has_cate:
-            model=initialize_model(algorithm,item_emb,category_table,2,32)
+    def get_baseline_output(inputs,mode):
+        orders = item_emb_layer(inputs)
+
+        if mode == 'average':
+            out = tf.reduce_sum(orders, axis=1)
+            out /= tf.expand_dims(get_sequence_length(orders), axis=1)
+        elif mode == 'last':
+            out = orders[:, -1, :]
         else:
-            model=initialize_model(algorithm,item_emb,None,2,32)
-        model.load_weights(os.path.join(load, 'model/model'))
+            raise ValueError(mode)
+        return out
+
+    is_baseline=False
+    if algorithm[:3]=='rnn':
+        model=load_model(os.path.join(load, 'model/model.tf'))
     elif algorithm in {'last', 'average'}:
-        model = models.BaselineModel(item_emb, mode=algorithm)
+        is_baseline=True
     else:
         raise Exception('unknown algorithm')
 
     p_counts, n_counts = 0, 0
     for inputs, labels in dataset:
-        scores, predictions = tf.math.top_k(model(inputs),top_k,sorted=True)
-        orders = inputs[1].numpy()
+        if has_cate:
+            batch_input={
+                'items':item_emb_layer(inputs[0]),
+                'mask':item_emb_layer.compute_mask(inputs[0]),
+                'cate':cate_emb_layer(inputs[0]),
+                'clicks':item_emb_layer(inputs[1]),
+                'clicks_mask':item_emb_layer.compute_mask(inputs[1]),
+                'clicks_cate':cate_emb_layer(inputs[1])
+            }
+        else:
+            batch_input={
+                'items':item_emb_layer(inputs),
+                'mask':item_emb_layer.compute_mask(inputs)
+            }
+        if is_baseline:
+            logits=get_baseline_output(inputs['items'],algorithm)
+        else:
+            logits=model(batch_input)
+        output=tf.matmul(logits,tf.transpose(item_emb))
+        scores, predictions = tf.math.top_k(output,top_k,sorted=True)
+        orders = inputs[1].numpy() if has_cate else inputs.numpy()
         labels = labels.numpy()
         scores = scores.numpy()
         predictions = predictions.numpy()

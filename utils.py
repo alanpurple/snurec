@@ -40,7 +40,7 @@ CATEGORY_ID = 'gnb_category_id'
 CATEGORY_IDX = 'gnb_category_idx'
 
 
-def initialize_model(name, embeddings, categories,
+def initialize_model(name, emb_size,
                     num_layers=1,num_units=128,decay=0,emb_way='mlp'):
     """
     Initialize a recommendation model based on its name.
@@ -52,33 +52,24 @@ def initialize_model(name, embeddings, categories,
     :return: the initialized model.
     """
 
-    if name in {'last', 'average'}:
-        return models.BaselineModel(embeddings, mode=name)
-    elif name == 'rnn-v1':
-        return models.RNN1(embeddings,
-                           num_layers=num_layers,
+    assert name[:3]=='rnn'
+
+    if name == 'rnn-v1':
+        return models.RNN1(emb_size,num_layers=num_layers,
                            num_units=num_units,
                            decay=decay)
     elif name == 'rnn-v2':
-        return models.RNN2(embeddings, categories,
-                           num_layers=num_layers,
+        return models.RNN2(emb_size,num_layers=num_layers,
                            num_units=num_units,
-                           decay=decay,
-                           emb_way=emb_way,
-                           )
+                           decay=decay)
     elif name == 'rnn-v3':
-        return models.RNN3(embeddings, categories,
-                           num_layers=num_layers,
+        return models.RNN3(emb_size,num_layers=num_layers,
                            num_units=num_units,
-                           decay=decay,
-                           emb_way=emb_way
-                           )
+                           decay=decay)
     elif name == 'rnn-v4':
-        return models.RNN4(embeddings, categories,
-                           num_layers=num_layers,
+        return models.RNN4(emb_size,num_layers=num_layers,
                            num_units=num_units,
-                           decay=decay,
-                           emb_way=emb_way)
+                           decay=decay)
     else:
         raise ValueError(name)
 
@@ -115,9 +106,9 @@ def read_instances(path, batch_size, buffer_size=10000,is_exp=False):
     orders = np.load(os.path.join(path, 'orders.npy'))
     labels = np.load(os.path.join(path, 'labels.npy'))
     if is_exp:
-        users = np.load(os.path.join(path, 'users.npy'))
+        #users = np.load(os.path.join(path, 'users.npy'))
         clicks = np.load(os.path.join(path, 'clicks.npy'))
-        arrays = (users, orders, clicks), labels
+        arrays = (orders, clicks), labels
     else:
         arrays=orders,labels
     dataset = tf.data.Dataset.from_tensor_slices(arrays)

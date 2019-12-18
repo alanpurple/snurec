@@ -25,7 +25,7 @@ import tqdm
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-from tensorflow.keras import optimizers,losses
+from tensorflow.keras import optimizers,losses,layers,initializers
 from utils import read_instances,read_titles,read_users,initialize_model
 
 
@@ -88,6 +88,7 @@ def gen(df):
     for _,row in df.iterrows():
         yield row.x[:,0],row.label
 
+
 @click.command()
 @click.option('--algorithm', '-a', type=str, default='rnn-v1')
 @click.option('--data', type=click.Path(), default='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2')
@@ -128,10 +129,17 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
 
     #users = read_users(os.path.join(data, 'users'))
     item_emb=np.load('doc2vec_128_2_10epochs_table.npy')
+    emb_size=item_emb.shape[1]
+    item_emb_layer=layers.Embedding(item_emb.shape[0],emb_size,
+                        embeddings_initializer=initializers.Constant(item_emb),
+                        mask_zero=True,trainable=False,name='item_emb')
     has_cate=False
     if algorithm=='rnn-v2' or algorithm=='rnn-v3' or algorithm=='rnn-v4':
         has_cate=True
         category_table=np.load('./cate.npy')
+        cate_emb_layer=layers.Embedding(category_table.shape[0],category_table.shape[1],
+                    embeddings_initializer=initializers.Constant(category_table),
+                    mask_zero=True,trainable=False,name='cate_emb')
 
     # trn_path = os.path.join(data, 'training')
     # val_path = os.path.join(data, 'validation')
@@ -152,25 +160,16 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
     test_data=tf.data.Dataset.from_generator(partial(gen,test_df),
             (tf.int32,tf.int32),((None,),())).padded_batch(64,([None],[]))
 
-
-    #num_users = users.shape[0]
-    #assert num_users is not None
-    if emb_way is None:
-        emb_way='mean'
     if has_cate:
         model = initialize_model(
-            algorithm,item_emb,
-            category_table,
+            algorithm,emb_size,
             num_layers,num_units,
-            decay=decay,
-            emb_way=emb_way)
+            decay=decay)
     else:
         model = initialize_model(
-            algorithm,item_emb,
-            None,
+            algorithm,emb_size,
             num_layers,num_units,
-            decay=decay,
-            emb_way=emb_way)
+            decay=decay)
 
     out = f'../out/{algorithm}' if out is None else out
     os.makedirs(out, exist_ok=True)
@@ -193,8 +192,23 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
             desc = f'Epoch {epoch}'
             trn_loss = 0.
             for inputs, labels in tqdm.tqdm(trn_data, desc, trn_batches):
+                if has_cate:
+                    batch_input={
+                        'items':item_emb_layer(inputs[0]),
+                        'mask':item_emb_layer.compute_mask(inputs[0]),
+                        'cate':cate_emb_layer(inputs[0]),
+                        'clicks':item_emb_layer(inputs[1]),
+                        'clicks_mask':item_emb_layer.compute_mask(inputs[1]),
+                        'clicks_cate':cate_emb_layer(inputs[1])
+                    }
+                else:
+                    batch_input={
+                        'items':item_emb_layer(inputs),
+                        'mask':item_emb_layer.compute_mask(inputs)
+                    }
                 with tf.GradientTape() as tape:
-                    logits = model(inputs)
+                    logits=model(batch_input)
+                    logits=tf.matmul(logits,tf.transpose(item_emb))
                     loss = tf.reduce_mean(cce(labels, logits))
                 gradients = tape.gradient(loss, model.trainable_variables)
                 optimizer.apply_gradients(zip(gradients, model.trainable_variables))
@@ -213,14 +227,14 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
                 f.write('BEST')
             f.write('\n')
 
-        # if epoch>0 and epoch%2==0:
-        #     model.save(os.path.join(out,'model/model_epoch{}.tf'.format(epoch)))
+        if epoch>0 and epoch%2==0:
+            model.save(os.path.join(out,'model/model_epoch{}.tf'.format(epoch)))
 
         if epoch >= best_epoch + patience:
             break
 
     model.load_weights(os.path.join(out, 'model/model'))
-    #model.save(os.path.join(out, 'model/model.tf'))
+    model.save(os.path.join(out, 'model/model.tf'))
 
     trn_loss = evaluate_loss(model, trn_data)
     val_loss = evaluate_loss(model, val_data)
