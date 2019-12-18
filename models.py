@@ -15,8 +15,7 @@ rewritten by Alan Anderson (alan@wemakeprice.com)
 
 """
 import tensorflow as tf
-from tensorflow.keras import layers,activations,Model,regularizers,losses,Sequential,initializers
-from tensorflow.keras import backend as K
+from tensorflow.keras import layers,Model,regularizers
 
 class RNN1(Model):
     """
@@ -185,7 +184,6 @@ class RNN4(RNN2):
         :param decay: an L2 decay parameter for regularization.
         """
         super().__init__(emb_size, num_layers=num_layers, num_units=num_units)
-        self.lstm_click = Sequential()
         if num_layers<2:
             self.lstm_click=layers.Bidirectional(layers.LSTM(num_units, return_sequences=True,
                                                  kernel_regularizer=regularizers.l2(decay),
