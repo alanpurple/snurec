@@ -117,6 +117,8 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
     test_data=tf.data.Dataset.from_generator(partial(gen,test_df),
             (tf.int32,tf.int32),((None,),())).padded_batch(64,([None],[]))
 
+    cce=losses.SparseCategoricalCrossentropy(True)
+
     @tf.function
     def evaluate_loss(model, data):
         """
@@ -126,7 +128,6 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
         :param data: the dataset of multiple batches.
         :return: the calculated loss.
         """
-        cce=losses.SparseCategoricalCrossentropy(True)
         loss, batches = 0., 0.
         for inputs, labels in data:
             if has_cate:
@@ -209,7 +210,6 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
     best_loss = np.inf
     os.makedirs(os.path.join(out, 'model'), exist_ok=True)
     optimizer = optimizer_v2.adam.Adam(learning_rate=lr)
-    cce=losses.SparseCategoricalCrossentropy(True)
 
     for epoch in range(num_epochs + 1):
         if epoch == 0:
