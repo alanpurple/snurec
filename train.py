@@ -41,49 +41,6 @@ def count_batches(dataset):
         count += 1
     return count
 
-@tf.function
-def evaluate_loss(model, data):
-    """
-    Evaluate the current loss of a given model for all data.
-
-    :param model: the model to be evaluated.
-    :param data: the dataset of multiple batches.
-    :return: the calculated loss.
-    """
-    cce=losses.SparseCategoricalCrossentropy(True)
-    loss, batches = 0., 0.
-    for inputs, labels in data:
-        logits = model(inputs)
-        loss+= tf.reduce_mean(cce(labels, logits))
-        batches+=1.
-    return loss / batches
-
-
-def evaluate_accuracy(has_cate,model, data, k):
-    """
-    Evaluate the accuracy of a given model for all data.
-
-    :param model: the model to be evaluated.
-    :param data: the dataset of multiple batches.
-    :param embeddings: the embedding vectors of candidates.
-    :param categories: the multi-hot categories of candidates.
-    :param top_k: the number of items to be evaluated.
-    :return: the calculated accuracy.
-    """
-    n_data, n_corrects = 0, 0
-    for inputs, labels in data:
-        if has_cate:
-            predictions = model(inputs)
-        else:
-            predictions = model(inputs)
-        top_k= tf.math.top_k(predictions, k, sorted=True)[1]
-        compared = tf.equal(tf.expand_dims(labels, axis=1), top_k)
-        corrects = tf.reduce_sum(tf.cast(compared, dtype=tf.float32), axis=1)
-        accuracy = tf.reduce_mean(corrects)
-        n_data += labels.shape[0]
-        n_corrects += accuracy.numpy().item() * labels.shape[0]
-    return n_corrects * 100 / n_data
-
 def gen(df):
     for _,row in df.iterrows():
         yield row.x[:,0],row.label
@@ -159,6 +116,76 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
             (tf.int32,tf.int32),((None,),())).padded_batch(64,([None],[]))
     test_data=tf.data.Dataset.from_generator(partial(gen,test_df),
             (tf.int32,tf.int32),((None,),())).padded_batch(64,([None],[]))
+
+    @tf.function
+    def evaluate_loss(model, data):
+        """
+        Evaluate the current loss of a given model for all data.
+
+        :param model: the model to be evaluated.
+        :param data: the dataset of multiple batches.
+        :return: the calculated loss.
+        """
+        cce=losses.SparseCategoricalCrossentropy(True)
+        loss, batches = 0., 0.
+        for inputs, labels in data:
+            if has_cate:
+                batch_input=[
+                    item_emb_layer(inputs[0]),
+                    item_emb_layer.compute_mask(inputs[0]),
+                    cate_emb_layer(inputs[0]),
+                    item_emb_layer(inputs[1]),
+                    item_emb_layer.compute_mask(inputs[1]),
+                    cate_emb_layer(inputs[1])
+                ]
+            else:
+                batch_input=[
+                    item_emb_layer(inputs),
+                    item_emb_layer.compute_mask(inputs)
+                ]
+            logits = model(batch_input)
+            logits=tf.matmul(logits,tf.transpose(item_emb))
+            loss+= tf.reduce_mean(cce(labels, logits))
+            batches+=1.
+        return loss / batches
+
+
+    def evaluate_accuracy(has_cate,model, data, k):
+        """
+        Evaluate the accuracy of a given model for all data.
+
+        :param model: the model to be evaluated.
+        :param data: the dataset of multiple batches.
+        :param embeddings: the embedding vectors of candidates.
+        :param categories: the multi-hot categories of candidates.
+        :param top_k: the number of items to be evaluated.
+        :return: the calculated accuracy.
+        """
+        n_data, n_corrects = 0, 0
+        for inputs, labels in data:
+            if has_cate:
+                batch_input=[
+                    item_emb_layer(inputs[0]),
+                    item_emb_layer.compute_mask(inputs[0]),
+                    cate_emb_layer(inputs[0]),
+                    item_emb_layer(inputs[1]),
+                    item_emb_layer.compute_mask(inputs[1]),
+                    cate_emb_layer(inputs[1])
+                ]
+            else:
+                batch_input=[
+                    item_emb_layer(inputs),
+                    item_emb_layer.compute_mask(inputs)
+                ]
+            logits = model(batch_input)
+            logits=tf.matmul(logits,tf.transpose(item_emb))
+            top_k= tf.math.top_k(logits, k, sorted=True)[1]
+            compared = tf.equal(tf.expand_dims(labels, axis=1), top_k)
+            corrects = tf.reduce_sum(tf.cast(compared, dtype=tf.float32), axis=1)
+            accuracy = tf.reduce_mean(corrects)
+            n_data += labels.shape[0]
+            n_corrects += accuracy.numpy().item() * labels.shape[0]
+        return n_corrects * 100 / n_data
 
     if has_cate:
         model = initialize_model(
