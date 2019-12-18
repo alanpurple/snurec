@@ -57,8 +57,8 @@ class RNN1(keras.Model):
         :return: the predicted scores for all candidates.
         """
         # B X T X E
-        orders = inputs['items']
-        mask=inputs['mask']
+        orders = inputs[0]
+        mask=inputs[1]
         # B X T X U
         if not isinstance(self.lstm, list):
             orders = self.lstm(orders,mask=mask)
@@ -98,12 +98,12 @@ class RNN2(RNN1):
         :param candidates: a tuple of input tensors for candidates.
         :return: the predicted scores for all candidates.
         """
-        orders=keras.layers.concatenate([inputs['items'],inputs['cate']])
+        orders=keras.layers.concatenate([inputs[0],inputs[2]])
         orders=self.order_dense(orders)
-        orders = self.lstm(orders,mask=inputs['mask'])
-        clicks=keras.layers.concatenate([inputs['clicks'],inputs['clicks_cate']])
+        orders = self.lstm(orders,mask=inputs[1])
+        clicks=keras.layers.concatenate([inputs[3],inputs[5]])
         clicks = self.click_dense(clicks)
-        out = self._run_attention(orders, clicks,inputs['clicks_mask'])
+        out = self._run_attention(orders, clicks,inputs[4])
         return self.dense_final(out)
         #cands_v = self._lookup_candidates()
 

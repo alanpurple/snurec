@@ -101,19 +101,19 @@ def main(algorithm=None, load=None, data='../out/instances', gpu=0, pos_cases=10
     p_counts, n_counts = 0, 0
     for inputs, labels in dataset:
         if has_cate:
-            batch_input={
-                'items':item_emb_layer(inputs[0]),
-                'mask':item_emb_layer.compute_mask(inputs[0]),
-                'cate':cate_emb_layer(inputs[0]),
-                'clicks':item_emb_layer(inputs[1]),
-                'clicks_mask':item_emb_layer.compute_mask(inputs[1]),
-                'clicks_cate':cate_emb_layer(inputs[1])
-            }
+            batch_input=[
+                item_emb_layer(inputs[0]),
+                item_emb_layer.compute_mask(inputs[0]),
+                cate_emb_layer(inputs[0]),
+                item_emb_layer(inputs[1]),
+                item_emb_layer.compute_mask(inputs[1]),
+                cate_emb_layer(inputs[1])
+            ]
         else:
-            batch_input={
-                'items':item_emb_layer(inputs),
-                'mask':item_emb_layer.compute_mask(inputs)
-            }
+            batch_input=[
+                item_emb_layer(inputs),
+                item_emb_layer.compute_mask(inputs)
+            ]
         if is_baseline:
             logits=get_baseline_output(inputs['items'],algorithm)
         else:

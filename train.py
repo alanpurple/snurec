@@ -193,19 +193,19 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
             trn_loss = 0.
             for inputs, labels in tqdm.tqdm(trn_data, desc, trn_batches):
                 if has_cate:
-                    batch_input={
-                        'items':item_emb_layer(inputs[0]),
-                        'mask':item_emb_layer.compute_mask(inputs[0]),
-                        'cate':cate_emb_layer(inputs[0]),
-                        'clicks':item_emb_layer(inputs[1]),
-                        'clicks_mask':item_emb_layer.compute_mask(inputs[1]),
-                        'clicks_cate':cate_emb_layer(inputs[1])
-                    }
+                    batch_input=[
+                        item_emb_layer(inputs[0]),
+                        item_emb_layer.compute_mask(inputs[0]),
+                        cate_emb_layer(inputs[0]),
+                        item_emb_layer(inputs[1]),
+                        item_emb_layer.compute_mask(inputs[1]),
+                        cate_emb_layer(inputs[1])
+                    ]
                 else:
-                    batch_input={
-                        'items':item_emb_layer(inputs),
-                        'mask':item_emb_layer.compute_mask(inputs)
-                    }
+                    batch_input=[
+                        item_emb_layer(inputs),
+                        item_emb_layer.compute_mask(inputs)
+                    ]
                 with tf.GradientTape() as tape:
                     logits=model(batch_input)
                     logits=tf.matmul(logits,tf.transpose(item_emb))
