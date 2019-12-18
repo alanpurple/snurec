@@ -25,7 +25,7 @@ import tqdm
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-from tensorflow import keras
+from tensorflow_core.python.keras import losses,layers,initializers,optimizer_v2
 from utils import read_instances,read_titles,read_users,initialize_model
 
 
@@ -50,7 +50,7 @@ def evaluate_loss(model, data):
     :param data: the dataset of multiple batches.
     :return: the calculated loss.
     """
-    cce=keras.losses.SparseCategoricalCrossentropy(True)
+    cce=losses.SparseCategoricalCrossentropy(True)
     loss, batches = 0., 0.
     for inputs, labels in data:
         logits = model(inputs)
@@ -130,15 +130,15 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
     #users = read_users(os.path.join(data, 'users'))
     item_emb=np.load('doc2vec_128_2_10epochs_table.npy')
     emb_size=item_emb.shape[1]
-    item_emb_layer=keras.layers.Embedding(item_emb.shape[0],emb_size,
-                        embeddings_initializer=keras.initializers.Constant(item_emb),
+    item_emb_layer=layers.Embedding(item_emb.shape[0],emb_size,
+                        embeddings_initializer=initializers.Constant(item_emb),
                         mask_zero=True,trainable=False,name='item_emb')
     has_cate=False
     if algorithm=='rnn-v2' or algorithm=='rnn-v3' or algorithm=='rnn-v4':
         has_cate=True
         category_table=np.load('./cate.npy')
-        cate_emb_layer=keras.layers.Embedding(category_table.shape[0],category_table.shape[1],
-                    embeddings_initializer=keras.initializers.Constant(category_table),
+        cate_emb_layer=layers.Embedding(category_table.shape[0],category_table.shape[1],
+                    embeddings_initializer=initializers.Constant(category_table),
                     mask_zero=True,trainable=False,name='cate_emb')
 
     # trn_path = os.path.join(data, 'training')
@@ -181,9 +181,8 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
     best_epoch = 0
     best_loss = np.inf
     os.makedirs(os.path.join(out, 'model'), exist_ok=True)
-    optimizer = keras.optimizers.Adam(learning_rate=lr)
-
-    cce=keras.losses.SparseCategoricalCrossentropy(True)
+    optimizer = optimizer_v2.adam.Adam(learning_rate=lr)
+    cce=losses.SparseCategoricalCrossentropy(True)
 
     for epoch in range(num_epochs + 1):
         if epoch == 0:

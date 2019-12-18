@@ -15,9 +15,9 @@ rewritten by Alan Anderson (alan@wemakeprice.com)
 
 """
 import tensorflow as tf
-from tensorflow import keras
+from tensorflow_core.python.keras import Model,layers,regularizers
 
-class RNN1(keras.Model):
+class RNN1(Model):
     """
     RNN 1 model for recommendation, which uses none of important techniques.
     """
@@ -33,19 +33,19 @@ class RNN1(keras.Model):
         """
         super().__init__()
         if num_layers<2:
-            self.lstm=keras.layers.LSTM(num_units, return_sequences=True,
-                                kernel_regularizer=keras.regularizers.l2(decay),
-                                bias_regularizer=keras.regularizers.l2(decay),
+            self.lstm=layers.LSTM(num_units, return_sequences=True,
+                                kernel_regularizer=regularizers.l2(decay),
+                                bias_regularizer=regularizers.l2(decay),
                                 activation='sigmoid',name='lstm')
         else:
-            self.lstm=[keras.layers.LSTM(num_units, return_sequences=True,
-                                kernel_regularizer=keras.regularizers.l2(decay),
-                                bias_regularizer=keras.regularizers.l2(decay),
+            self.lstm=[layers.LSTM(num_units, return_sequences=True,
+                                kernel_regularizer=regularizers.l2(decay),
+                                bias_regularizer=regularizers.l2(decay),
                                 activation='sigmoid',name='lstm{}'.format(i))
                                 for i in range(num_layers)]
 
-        self.dense_final = keras.layers.Dense(emb_size, kernel_regularizer=keras.regularizers.l2(decay),
-                                    bias_regularizer=keras.regularizers.l2(decay),name='dense_final')
+        self.dense_final = layers.Dense(emb_size, kernel_regularizer=regularizers.l2(decay),
+                                    bias_regularizer=regularizers.l2(decay),name='dense_final')
 
     @tf.function
     def call(self, inputs):
@@ -85,9 +85,9 @@ class RNN2(RNN1):
         """
         super().__init__(emb_size,num_units, num_layers, decay)
 
-        self.order_dense = keras.layers.Dense(emb_size,name='order_dense')
-        self.click_dens=keras.layers.Dense(emb_size,name='click_dense')
-        self.softmax=keras.layers.Softmax(1)
+        self.order_dense = layers.Dense(emb_size,name='order_dense')
+        self.click_dens=layers.Dense(emb_size,name='click_dense')
+        self.softmax=layers.Softmax(1)
 
     @tf.function
     def call(self, inputs):
@@ -98,10 +98,10 @@ class RNN2(RNN1):
         :param candidates: a tuple of input tensors for candidates.
         :return: the predicted scores for all candidates.
         """
-        orders=keras.layers.concatenate([inputs[0],inputs[2]])
+        orders=layers.concatenate([inputs[0],inputs[2]])
         orders=self.order_dense(orders)
         orders = self.lstm(orders,mask=inputs[1])
-        clicks=keras.layers.concatenate([inputs[3],inputs[5]])
+        clicks=layers.concatenate([inputs[3],inputs[5]])
         clicks = self.click_dense(clicks)
         out = self._run_attention(orders, clicks,inputs[4])
         return self.dense_final(out)
@@ -118,7 +118,7 @@ class RNN2(RNN1):
         categories_sum = tf.reduce_sum(cat_embs, 2, keepdims=True)
         categories = cat_embs / tf.where(categories_sum > 0, categories_sum, 1)
         cat_embeddings = self.cat_dense(categories)
-        return keras.layers.average([item_embs, cat_embeddings])
+        return layers.average([item_embs, cat_embeddings])
 
     # @tf.function
     # def _lookup_candidates(self,item_embs,cate_embs):
@@ -132,7 +132,7 @@ class RNN2(RNN1):
     #     categories_sum = tf.reduce_sum(cate_embs, 1, keepdims=True)
     #     categories = cate_embs / tf.where(categories_sum > 0, categories_sum, 1)
     #     cat_dense=self.cat_dense(categories)
-    #     return keras.layers.average([self.item_emb.weights[0], cat_dense])
+    #     return layers.average([self.item_emb.weights[0], cat_dense])
 
     @tf.function
     def _run_attention(self,orders,clicks,clicks_mask):
@@ -165,7 +165,7 @@ class RNN3(RNN2):
         scores = tf.reduce_sum(tf.multiply(orders, tiled), axis=2, keepdims=True)
         scores = self.softmax(scores)
         out = tf.reduce_sum(orders * scores, axis=1)  # context vector
-        return keras.layers.concatenate([out, out_last], axis=1)
+        return layers.concatenate([out, out_last], axis=1)
 
 
 class RNN4(RNN2):
@@ -185,20 +185,20 @@ class RNN4(RNN2):
         """
         super().__init__(emb_size, num_layers=num_layers, num_units=num_units)
         if num_layers<2:
-            self.lstm_click=keras.layers.Bidirectional(keras.layers.LSTM(num_units, return_sequences=True,
-                                                 kernel_regularizer=keras.regularizers.l2(decay),
-                                                 bias_regularizer=keras.regularizers.l2(decay),
+            self.lstm_click=layers.Bidirectional(layers.LSTM(num_units, return_sequences=True,
+                                                 kernel_regularizer=regularizers.l2(decay),
+                                                 bias_regularizer=regularizers.l2(decay),
                                                  activation='sigmoid',name='lstm_click'))
         else:
             self.lstm_click=[
-                keras.layers.Bidirectional(keras.layers.LSTM(num_units, return_sequences=True,
-                                                 kernel_regularizer=keras.regularizers.l2(decay),
-                                                 bias_regularizer=keras.regularizers.l2(decay),
+                layers.Bidirectional(layers.LSTM(num_units, return_sequences=True,
+                                                 kernel_regularizer=regularizers.l2(decay),
+                                                 bias_regularizer=regularizers.l2(decay),
                                                  activation='sigmoid',name='lstm_click{}'.format(i)))
                             for i in range(num_layers)]
-        self.linear_click = keras.layers.Dense(num_units,
-                                         kernel_regularizer=keras.regularizers.l2(decay),
-                                         bias_regularizer=keras.regularizers.l2(decay),name='linear_click')
+        self.linear_click = layers.Dense(num_units,
+                                         kernel_regularizer=regularizers.l2(decay),
+                                         bias_regularizer=regularizers.l2(decay),name='linear_click')
 
     @tf.function
     def _run_attention(self, orders, clicks,click_mask):
@@ -221,4 +221,4 @@ class RNN4(RNN2):
         scores = tf.reduce_sum(tf.multiply(orders, tiled), axis=2, keepdims=True)
         scores = self.softmax(scores)
         out = tf.reduce_sum(orders * scores, axis=1)  # context vector
-        return keras.layers.concatenate([out, orders[:, -1, :]], axis=1)
+        return layers.concatenate([out, orders[:, -1, :]], axis=1)

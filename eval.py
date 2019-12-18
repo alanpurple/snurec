@@ -19,7 +19,8 @@ rewritten by Alan Anderson (alan@wemakeprice.com)
 import click
 import os
 import tensorflow as tf
-from tensorflow import keras
+from tensorflow_core.python.keras import layers,initializers
+from tensorflow_core.python.keras.models import load_model
 import numpy as np
 import models
 from utils import read_instances,read_titles,initialize_model
@@ -66,15 +67,15 @@ def main(algorithm=None, load=None, data='../out/instances', gpu=0, pos_cases=10
     titles = read_titles(path_items)
     item_emb=np.load('doc2vec_128_2_10epochs_table.npy')
     emb_size=item_emb.shape[1]
-    item_emb_layer=keras.layers.Embedding(item_emb.shape[0],emb_size,
-                        embeddings_initializer=keras.initializers.Constant(item_emb),
+    item_emb_layer=layers.Embedding(item_emb.shape[0],emb_size,
+                        embeddings_initializer=initializers.Constant(item_emb),
                         mask_zero=True,trainable=False,name='item_emb')
     has_cate=False
     if algorithm=='rnn-v2' or algorithm=='rnn-v3' or algorithm=='rnn-v4':
         has_cate=True
         category_table=np.load('./cate.npy')
-        cate_emb_layer=keras.layers.Embedding(category_table.shape[0],category_table.shape[1],
-                    embeddings_initializer=keras.initializers.Constant(category_table),
+        cate_emb_layer=layers.Embedding(category_table.shape[0],category_table.shape[1],
+                    embeddings_initializer=initializers.Constant(category_table),
                     mask_zero=True,trainable=False,name='cate_emb')
     dataset = read_instances(path_instances, batch_size=128)
 
@@ -92,7 +93,7 @@ def main(algorithm=None, load=None, data='../out/instances', gpu=0, pos_cases=10
 
     is_baseline=False
     if algorithm[:3]=='rnn':
-        model=keras.models.load_model(os.path.join(load, 'model/model.tf'))
+        model=load_model(os.path.join(load, 'model/model.tf'))
     elif algorithm in {'last', 'average'}:
         is_baseline=True
     else:
