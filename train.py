@@ -118,6 +118,8 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
     test_data=tf.data.Dataset.from_generator(partial(gen,test_df),
             (tf.int32,tf.int32),((None,),())).padded_batch(64,([None],[]))
 
+    print('dataset loading complete')
+
     cce=losses.SparseCategoricalCrossentropy(True)
 
     def evaluate_loss(model, data):
@@ -128,6 +130,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
         :param data: the dataset of multiple batches.
         :return: the calculated loss.
         """
+        print('call model and compute loss')
         loss, batches = 0., 0.
         for inputs, labels in data:
             if has_cate:
@@ -144,6 +147,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
                     item_emb_layer(inputs),
                     item_emb_layer.compute_mask(inputs)
                 ]
+            print('calling model for batch input')
             logits = tf.cast(model(batch_input),tf.float64)
             logits=tf.matmul(logits,tf.transpose(item_emb))
             loss+= tf.reduce_mean(cce(labels, logits))
@@ -215,6 +219,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
         if epoch == 0:
             trn_loss = evaluate_loss(model, trn_data)
         else:
+            print('training for epoch{}'.format(epoch))
             desc = f'Epoch {epoch}'
             trn_loss = 0.
             for inputs, labels in tqdm.tqdm(trn_data, desc, trn_batches):
