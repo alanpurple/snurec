@@ -25,7 +25,8 @@ import tqdm
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-from tensorflow_core.python.keras import losses,layers,initializers,optimizer_v2
+from tensorflow_core.python.keras import losses,layers,initializers
+from tensorflow import keras
 from utils import read_instances,read_titles,read_users,initialize_model
 
 
@@ -209,7 +210,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
     best_epoch = 0
     best_loss = np.inf
     os.makedirs(os.path.join(out, 'model'), exist_ok=True)
-    optimizer = optimizer_v2.adam.Adam(learning_rate=lr)
+    optimizer = keras.optimizers.Adam(learning_rate=lr)
 
     for epoch in range(num_epochs + 1):
         if epoch == 0:
