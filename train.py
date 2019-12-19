@@ -120,7 +120,6 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
 
     cce=losses.SparseCategoricalCrossentropy(True)
 
-    @tf.function
     def evaluate_loss(model, data):
         """
         Evaluate the current loss of a given model for all data.
