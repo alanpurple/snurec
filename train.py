@@ -29,19 +29,6 @@ from tensorflow_core.python.keras import losses,layers,initializers
 from tensorflow import keras
 from utils import read_instances,read_titles,read_users,initialize_model
 
-
-def count_batches(dataset):
-    """
-    Count the number of batches in a dataset.
-
-    :param dataset: the dataset.
-    :return: the number of batches.
-    """
-    count = 0
-    for _ in dataset:
-        count += 1
-    return count
-
 def gen(df):
     for _,row in df.iterrows():
         yield row.x[:,0],row.label
@@ -54,7 +41,6 @@ def gen(df):
 @click.option('--num-epochs', type=int, default=10)
 @click.option('--num-units', type=int, default=32)
 @click.option('--num-layers', type=int, default=2)
-@click.option('--emb-way', type=str, default=None)
 @click.option('--lr', type=float, default=1e-3)
 @click.option('--decay', type=float, default=1e-3)
 @click.option('--batch-size', type=int, default=256)
@@ -63,7 +49,7 @@ def gen(df):
 def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
          algorithm='rnn-v1', top_k=100, lr=1e-3, decay=1e-3,
          num_epochs=10, num_units=32, num_layers=2,
-         emb_way=None, batch_size=256, patience=2, out='.'):
+         batch_size=256, patience=2, out='.'):
     """
     Train a recommendation model.
 
@@ -75,7 +61,6 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
     :param num_epochs: the number of training epochs.
     :param num_units: the number of units in LSTM cells.
     :param num_layers: the number of LSTM layers.
-    :param emb_way: how to generate embedding vectors of items.
     :param batch_size: a batch size.
     :param patience: the number of epochs to wait until the termination.
     :param out: the path to store the outputs.
@@ -112,7 +97,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
     test_df=pd.read_pickle(data+'/test_data_df.pkl.gz','gzip')
 
     trn_data=tf.data.Dataset.from_generator(partial(gen,train_df),
-            (tf.int32,tf.int32),((None,),())).shuffle(512).padded_batch(batch_size,([None],[])).prefetch(tf.data.experimental.AUTOTUNE)
+            (tf.int32,tf.int32),((None,),())).shuffle(512).padded_batch(batch_size,([None],[]),drop_remainder=True).prefetch(tf.data.experimental.AUTOTUNE)
     val_data=tf.data.Dataset.from_generator(partial(gen,val_df),
             (tf.int32,tf.int32),((None,),())).padded_batch(64,([None],[]))
     test_data=tf.data.Dataset.from_generator(partial(gen,test_df),
@@ -130,7 +115,6 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
         :param data: the dataset of multiple batches.
         :return: the calculated loss.
         """
-        print('call model and compute loss')
         loss, batches = 0., 0.
         for inputs, labels in data:
             if has_cate:
@@ -147,7 +131,6 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
                     item_emb_layer(inputs),
                     item_emb_layer.compute_mask(inputs)
                 ]
-            print('calling model for batch input')
             logits = tf.cast(model(batch_input),tf.float64)
             logits=tf.matmul(logits,tf.transpose(item_emb))
             loss+= tf.reduce_mean(cce(labels, logits))
@@ -192,16 +175,10 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
             n_corrects += accuracy.numpy().item() * labels.shape[0]
         return n_corrects * 100 / n_data
 
-    if has_cate:
-        model = initialize_model(
-            algorithm,emb_size,
-            num_layers,num_units,
-            decay=decay)
-    else:
-        model = initialize_model(
-            algorithm,emb_size,
-            num_layers,num_units,
-            decay=decay)
+    model = initialize_model(
+        algorithm,emb_size,
+        num_layers,num_units,
+        decay=decay)
 
     out = f'../out/{algorithm}' if out is None else out
     os.makedirs(out, exist_ok=True)
@@ -209,12 +186,13 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
     if os.path.exists(out_loss):
         os.remove(out_loss)
 
-    trn_batches = count_batches(trn_data)
     best_epoch = 0
     best_loss = np.inf
     os.makedirs(os.path.join(out, 'model'), exist_ok=True)
     optimizer = keras.optimizers.Adam(learning_rate=lr)
 
+    num_batches=int(len(train_df)/batch_size)
+    
     for epoch in range(num_epochs + 1):
         if epoch == 0:
             trn_loss = evaluate_loss(model, trn_data)
@@ -222,7 +200,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
             print('training for epoch{}'.format(epoch))
             desc = f'Epoch {epoch}'
             trn_loss = 0.
-            for inputs, labels in tqdm.tqdm(trn_data, desc, trn_batches):
+            for inputs, labels in tqdm.tqdm(trn_data, desc, num_batches):
                 if has_cate:
                     batch_input=[
                         item_emb_layer(inputs[0]),
@@ -244,7 +222,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
                 gradients = tape.gradient(loss, model.trainable_variables)
                 optimizer.apply_gradients(zip(gradients, model.trainable_variables))
                 trn_loss+=loss
-            trn_loss /= trn_batches
+            trn_loss /= num_batches
 
         val_loss = evaluate_loss(model, val_data)
         if val_loss < best_loss:
