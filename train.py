@@ -86,7 +86,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
     start_time = time.time()
 
     #users = read_users(os.path.join(data, 'users'))
-    item_emb=np.load('doc2vec_128_2_10epochs_table.npy')
+    item_emb=np.load('doc2vec_32_2_10epochs_table.npy')
     emb_size=item_emb.shape[1]
     item_emb_layer=layers.Embedding(item_emb.shape[0],emb_size,
                         embeddings_initializer=initializers.Constant(item_emb),
