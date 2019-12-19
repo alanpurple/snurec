@@ -145,7 +145,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
                     item_emb_layer(inputs),
                     item_emb_layer.compute_mask(inputs)
                 ]
-            logits = model(batch_input)
+            logits = tf.cast(model(batch_input),tf.float64)
             logits=tf.matmul(logits,tf.transpose(item_emb))
             loss+= tf.reduce_mean(cce(labels, logits))
             batches+=1.
@@ -179,7 +179,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
                     item_emb_layer(inputs),
                     item_emb_layer.compute_mask(inputs)
                 ]
-            logits = model(batch_input)
+            logits = tf.cast(model(batch_input),tf.float64)
             logits=tf.matmul(logits,tf.transpose(item_emb))
             top_k= tf.math.top_k(logits, k, sorted=True)[1]
             compared = tf.equal(tf.expand_dims(labels, axis=1), top_k)
@@ -234,7 +234,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
                         item_emb_layer.compute_mask(inputs)
                     ]
                 with tf.GradientTape() as tape:
-                    logits=model(batch_input)
+                    logits=tf.cast(model(batch_input),tf.float64)
                     logits=tf.matmul(logits,tf.transpose(item_emb))
                     loss = tf.reduce_mean(cce(labels, logits))
                 gradients = tape.gradient(loss, model.trainable_variables)
