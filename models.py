@@ -68,7 +68,7 @@ class RNN1(Model):
         # B X U
         out = orders[:, -1, :]
         # out: B x E
-        return self.linear(out)
+        return self.dense_final(out)
 
 class RNN2(RNN1):
     """
