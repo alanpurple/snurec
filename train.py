@@ -113,7 +113,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
         """
         loss, batches = 0., 0.
         for inputs, labels in data:
-            logits = tf.cast(model(inputs),tf.float64)
+            logits = model(inputs)
             logits=tf.matmul(logits,tf.transpose(item_emb))
             loss+= tf.reduce_mean(cce(labels, logits))
             batches+=1.
@@ -133,7 +133,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
         """
         n_data, n_corrects = 0, 0
         for inputs, labels in data:
-            logits = tf.cast(model(inputs),tf.float64)
+            logits = model(inputs)
             logits=tf.matmul(logits,tf.transpose(item_emb))
             top_k= tf.math.top_k(logits, k, sorted=True)[1]
             compared = tf.equal(tf.expand_dims(labels, axis=1), top_k)
@@ -169,7 +169,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
     
     @tf.function
     def compute_loss(inputs):
-        logits=tf.cast(model(inputs),tf.float64)
+        logits=model(inputs)
         logits=tf.matmul(logits,tf.transpose(item_emb))
         return tf.reduce_mean(cce(labels, logits))
     for epoch in range(num_epochs + 1):
