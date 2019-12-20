@@ -97,8 +97,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
     test_df=pd.read_pickle(data+'/test_data_df.pkl.gz','gzip')
 
     trn_data=tf.data.Dataset.from_generator(partial(gen,train_df),
-            (tf.int32,tf.int32),((None,),())).shuffle(512).padded_batch(batch_size,([None],[]),drop_remainder=True)
-            #.prefetch(tf.data.experimental.AUTOTUNE)
+            (tf.int32,tf.int32),((None,),())).shuffle(512).padded_batch(batch_size,([None],[]),drop_remainder=True).prefetch(tf.data.experimental.AUTOTUNE)
     val_data=tf.data.Dataset.from_generator(partial(gen,val_df),
             (tf.int32,tf.int32),((None,),())).padded_batch(64,([None],[]))
     test_data=tf.data.Dataset.from_generator(partial(gen,test_df),
