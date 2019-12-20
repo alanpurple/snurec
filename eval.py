@@ -20,8 +20,8 @@ import click
 import os
 import tensorflow as tf
 from tensorflow_core.python.keras import layers,initializers
-from tensorflow_core.python.keras.models import load_model
 import numpy as np
+import pickle
 import models
 from utils import read_instances,read_titles,initialize_model
 
@@ -67,20 +67,17 @@ def main(algorithm=None, load=None, data='../out/instances', gpu=0, pos_cases=10
     titles = read_titles(path_items)
     item_emb=np.load('doc2vec_128_2_10epochs_table.npy')
     emb_size=item_emb.shape[1]
-    item_emb_layer=layers.Embedding(item_emb.shape[0],emb_size,
-                        embeddings_initializer=initializers.Constant(item_emb),
-                        mask_zero=True,trainable=False,name='item_emb')
     has_cate=False
     if algorithm=='rnn-v2' or algorithm=='rnn-v3' or algorithm=='rnn-v4':
         has_cate=True
         category_table=np.load('./cate.npy')
-        cate_emb_layer=layers.Embedding(category_table.shape[0],category_table.shape[1],
-                    embeddings_initializer=initializers.Constant(category_table),
-                    mask_zero=True,trainable=False,name='cate_emb')
     dataset = read_instances(path_instances, batch_size=128)
 
+    @tf.function
     def get_baseline_output(inputs,mode):
-        orders = item_emb_layer(inputs)
+        orders=layers.Embedding(item_emb.shape[0],emb_size,
+                        embeddings_initializer=initializers.Constant(item_emb),
+                        mask_zero=True,trainable=False,name='item_emb')(inputs)
 
         if mode == 'average':
             out = tf.reduce_sum(orders, axis=1)
@@ -92,8 +89,19 @@ def main(algorithm=None, load=None, data='../out/instances', gpu=0, pos_cases=10
         return out
 
     is_baseline=False
+    # To Do: insert mechanism to load num_layer,num_units and decay settings
     if algorithm[:3]=='rnn':
-        model=load_model(os.path.join(load, 'model/model.tf'))
+        if has_cate:
+            model=initialize_model(algorithm,item_emb,2,32,0,category_table)
+            
+        else:
+            model=initialize_model(algorithm,item_emb,2,32,0)
+        with open('model/best_weights.pkl','wb') as best_temp:
+            weight_dict=pickle.load(best_temp)
+        for k,v in weight_dict.items():
+            for layer in model.layers:
+                if layer.name==k:
+                    layer.set_weights(v)
     elif algorithm in {'last', 'average'}:
         is_baseline=True
     else:
@@ -101,24 +109,10 @@ def main(algorithm=None, load=None, data='../out/instances', gpu=0, pos_cases=10
 
     p_counts, n_counts = 0, 0
     for inputs, labels in dataset:
-        if has_cate:
-            batch_input=[
-                item_emb_layer(inputs[0]),
-                item_emb_layer.compute_mask(inputs[0]),
-                cate_emb_layer(inputs[0]),
-                item_emb_layer(inputs[1]),
-                item_emb_layer.compute_mask(inputs[1]),
-                cate_emb_layer(inputs[1])
-            ]
-        else:
-            batch_input=[
-                item_emb_layer(inputs),
-                item_emb_layer.compute_mask(inputs)
-            ]
         if is_baseline:
-            logits=get_baseline_output(inputs['items'],algorithm)
+            logits=get_baseline_output(inputs,algorithm)
         else:
-            logits=model(batch_input)
+            logits=model(inputs)
         output=tf.matmul(logits,tf.transpose(item_emb))
         scores, predictions = tf.math.top_k(output,top_k,sorted=True)
         orders = inputs[1].numpy() if has_cate else inputs.numpy()

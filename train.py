@@ -21,6 +21,7 @@ from functools import partial
 import os
 import click
 import tqdm
+import pickle
 
 import numpy as np
 import pandas as pd
@@ -71,18 +72,11 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
     start_time = time.time()
 
     #users = read_users(os.path.join(data, 'users'))
-    item_emb=np.load('doc2vec_32_2_10epochs_table.npy')
-    emb_size=item_emb.shape[1]
-    item_emb_layer=layers.Embedding(item_emb.shape[0],emb_size,
-                        embeddings_initializer=initializers.Constant(item_emb),
-                        mask_zero=True,trainable=False,name='item_emb')
+    item_emb=np.load('doc2vec_128_2_10epochs_table.npy')
     has_cate=False
     if algorithm=='rnn-v2' or algorithm=='rnn-v3' or algorithm=='rnn-v4':
         has_cate=True
         category_table=np.load('./cate.npy')
-        cate_emb_layer=layers.Embedding(category_table.shape[0],category_table.shape[1],
-                    embeddings_initializer=initializers.Constant(category_table),
-                    mask_zero=True,trainable=False,name='cate_emb')
 
     # trn_path = os.path.join(data, 'training')
     # val_path = os.path.join(data, 'validation')
@@ -96,12 +90,14 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
     val_df=pd.read_pickle(data+'/valid_data_df.pkl.gz','gzip')
     test_df=pd.read_pickle(data+'/test_data_df.pkl.gz','gzip')
 
+    seq_len=train_df.apply(lambda row:len(row.x),axis=1).max()
+
     trn_data=tf.data.Dataset.from_generator(partial(gen,train_df),
-            (tf.int32,tf.int32),((None,),())).shuffle(512).padded_batch(batch_size,([None],[]),drop_remainder=True).prefetch(tf.data.experimental.AUTOTUNE)
+            (tf.int32,tf.int32),((None,),())).shuffle(512).padded_batch(batch_size,([seq_len],[]),drop_remainder=True).prefetch(tf.data.experimental.AUTOTUNE)
     val_data=tf.data.Dataset.from_generator(partial(gen,val_df),
-            (tf.int32,tf.int32),((None,),())).padded_batch(64,([None],[]))
+            (tf.int32,tf.int32),((None,),())).padded_batch(64,([seq_len],[]))
     test_data=tf.data.Dataset.from_generator(partial(gen,test_df),
-            (tf.int32,tf.int32),((None,),())).padded_batch(64,([None],[]))
+            (tf.int32,tf.int32),((None,),())).padded_batch(64,([seq_len],[]))
 
     print('dataset loading complete')
 
@@ -117,27 +113,13 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
         """
         loss, batches = 0., 0.
         for inputs, labels in data:
-            if has_cate:
-                batch_input=[
-                    item_emb_layer(inputs[0]),
-                    item_emb_layer.compute_mask(inputs[0]),
-                    cate_emb_layer(inputs[0]),
-                    item_emb_layer(inputs[1]),
-                    item_emb_layer.compute_mask(inputs[1]),
-                    cate_emb_layer(inputs[1])
-                ]
-            else:
-                batch_input=[
-                    item_emb_layer(inputs),
-                    item_emb_layer.compute_mask(inputs)
-                ]
-            logits = tf.cast(model(batch_input),tf.float64)
+            logits = tf.cast(model(inputs),tf.float64)
             logits=tf.matmul(logits,tf.transpose(item_emb))
             loss+= tf.reduce_mean(cce(labels, logits))
             batches+=1.
         return loss / batches
 
-
+    @tf.function
     def evaluate_accuracy(has_cate,model, data, k):
         """
         Evaluate the accuracy of a given model for all data.
@@ -151,21 +133,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
         """
         n_data, n_corrects = 0, 0
         for inputs, labels in data:
-            if has_cate:
-                batch_input=[
-                    item_emb_layer(inputs[0]),
-                    item_emb_layer.compute_mask(inputs[0]),
-                    cate_emb_layer(inputs[0]),
-                    item_emb_layer(inputs[1]),
-                    item_emb_layer.compute_mask(inputs[1]),
-                    cate_emb_layer(inputs[1])
-                ]
-            else:
-                batch_input=[
-                    item_emb_layer(inputs),
-                    item_emb_layer.compute_mask(inputs)
-                ]
-            logits = tf.cast(model(batch_input),tf.float64)
+            logits = tf.cast(model(inputs),tf.float64)
             logits=tf.matmul(logits,tf.transpose(item_emb))
             top_k= tf.math.top_k(logits, k, sorted=True)[1]
             compared = tf.equal(tf.expand_dims(labels, axis=1), top_k)
@@ -175,10 +143,16 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
             n_corrects += accuracy.numpy().item() * labels.shape[0]
         return n_corrects * 100 / n_data
 
-    model = initialize_model(
-        algorithm,emb_size,
+    if has_cate:
+        model=initialize_model(
+        algorithm,item_emb,
         num_layers,num_units,
-        decay=decay)
+        decay,category_table)
+    else:
+        model = initialize_model(
+        algorithm,item_emb,
+        num_layers,num_units,
+        decay)
 
     out = f'../out/{algorithm}' if out is None else out
     os.makedirs(out, exist_ok=True)
@@ -195,21 +169,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
     
     @tf.function
     def compute_loss(inputs):
-        if has_cate:
-            batch_input=[
-                item_emb_layer(inputs[0]),
-                item_emb_layer.compute_mask(inputs[0]),
-                cate_emb_layer(inputs[0]),
-                item_emb_layer(inputs[1]),
-                item_emb_layer.compute_mask(inputs[1]),
-                cate_emb_layer(inputs[1])
-            ]
-        else:
-            batch_input=[
-                item_emb_layer(inputs),
-                item_emb_layer.compute_mask(inputs)
-            ]
-        logits=tf.cast(model(batch_input),tf.float64)
+        logits=tf.cast(model(inputs),tf.float64)
         logits=tf.matmul(logits,tf.transpose(item_emb))
         return tf.reduce_mean(cce(labels, logits))
     for epoch in range(num_epochs + 1):
@@ -231,7 +191,16 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
         if val_loss < best_loss:
             best_epoch = epoch
             best_loss = val_loss
-            model.save_weights(os.path.join(out, 'model/model'))
+            best_weights_dict={}
+            for layer in model.layers:
+                if has_cate:
+                    if layer.name!='item_emb' and layer.name!='cate_emb':
+                        best_weights_dict[layer.name]=layer.get_weights()
+            with open('model/best_weights.pkl','wb') as best_temp:
+                pickle.dump(best_weights_dict,best_temp)
+            with open('model/epoch{}.pkl'.format(epoch),'wb') as epoch_save:
+                pickle.dump(best_weights_dict,epoch_save)
+
 
         with open(out_loss, 'a') as f:
             f.write(f'{epoch:4d}\t{trn_loss:10.4f}\t{val_loss:10.4f}\t')
@@ -239,14 +208,13 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
                 f.write('BEST')
             f.write('\n')
 
-        if epoch>0 and epoch%2==0:
-            model.save(os.path.join(out,'model/model_epoch{}.tf'.format(epoch)))
-
         if epoch >= best_epoch + patience:
             break
-
-    model.load_weights(os.path.join(out, 'model/model'))
-    model.save(os.path.join(out, 'model/model.tf'))
+    
+    for k,v in best_weights_dict:
+        for layer in model.layers:
+            if layer.name==k:
+                layer.set_weights(v)
 
     trn_loss = evaluate_loss(model, trn_data)
     val_loss = evaluate_loss(model, val_data)

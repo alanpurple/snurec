@@ -40,8 +40,8 @@ CATEGORY_ID = 'gnb_category_id'
 CATEGORY_IDX = 'gnb_category_idx'
 
 
-def initialize_model(name, emb_size,
-                    num_layers=1,num_units=128,decay=0,emb_way='mlp'):
+def initialize_model(name=None, embeddings=None,
+                    num_layers=1,num_units=128,decay=0,category_emb=None):
     """
     Initialize a recommendation model based on its name.
 
@@ -55,21 +55,21 @@ def initialize_model(name, emb_size,
     assert name[:3]=='rnn'
 
     if name == 'rnn-v1':
-        return models.RNN1(emb_size,num_layers=num_layers,
-                           num_units=num_units,
-                           decay=decay)
+        return models.RNN1(embeddings,num_layers,
+                           num_units,
+                           decay)
     elif name == 'rnn-v2':
-        return models.RNN2(emb_size,num_layers=num_layers,
-                           num_units=num_units,
-                           decay=decay)
+        return models.RNN2(embeddings,num_layers,
+                           num_units,
+                           decay,category_emb)
     elif name == 'rnn-v3':
-        return models.RNN3(emb_size,num_layers=num_layers,
-                           num_units=num_units,
-                           decay=decay)
+        return models.RNN3(embeddings,num_layers,
+                           num_units,
+                           decay,category_emb)
     elif name == 'rnn-v4':
-        return models.RNN4(emb_size,num_layers=num_layers,
-                           num_units=num_units,
-                           decay=decay)
+        return models.RNN4(embeddings,num_layers,
+                           num_units,
+                           decay,category_emb)
     else:
         raise ValueError(name)
 

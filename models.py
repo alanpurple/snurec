@@ -15,14 +15,14 @@ rewritten by Alan Anderson (alan@wemakeprice.com)
 
 """
 import tensorflow as tf
-from tensorflow_core.python.keras import Model,layers,regularizers
+from tensorflow_core.python.keras import Model,layers,regularizers,Input,initializers
 
 class RNN1(Model):
     """
     RNN 1 model for recommendation, which uses none of important techniques.
     """
 
-    def __init__(self,emb_size, num_units=32, num_layers=1, decay=0):
+    def __init__(self,embeddings, num_units=32, num_layers=1, decay=0):
         """
         Class initializer.
 
@@ -32,6 +32,11 @@ class RNN1(Model):
         :param decay: an L2 decay parameter for regularization.
         """
         super().__init__()
+
+        emb_size=embeddings.shape[1]
+        self.item_emb_layer=layers.Embedding(embeddings.shape[0],emb_size,
+                        embeddings_initializer=initializers.Constant(embeddings),
+                        mask_zero=True,trainable=False,name='item_emb')
         if num_layers<2:
             self.lstm=layers.LSTM(num_units, return_sequences=True,
                                 kernel_regularizer=regularizers.l2(decay),
@@ -57,8 +62,8 @@ class RNN1(Model):
         :return: the predicted scores for all candidates.
         """
         # B X T X E
-        orders = inputs[0]
-        mask=inputs[1]
+        orders = self.item_emb_layer(inputs)
+        mask=self.item_emb_layer.compute_mask(inputs)
         # B X T X U
         if not isinstance(self.lstm, list):
             orders = self.lstm(orders,mask=mask)
@@ -70,12 +75,36 @@ class RNN1(Model):
         # out: B x E
         return self.dense_final(out)
 
+# @tf.function
+# def Make_temp_rnn(seq_len,embeddings,num_units=32,num_layers=1,decay=0):
+#     inputs=Input((seq_len,))
+#     emb_size=embeddings.shape[1]
+#     output=layers.Embedding(embeddings.shape[0],emb_size,
+#                         embeddings_initializer=initializers.Constant(embeddings),
+#                         mask_zero=True,trainable=False,name='item_emb')(inputs)
+#     if num_layers<2:
+#         output=layers.LSTM(num_units, return_sequences=True,
+#                             kernel_regularizer=regularizers.l2(decay),
+#                             bias_regularizer=regularizers.l2(decay),
+#                             activation='sigmoid',name='lstm')(inputs)
+#     else:
+#         output=inputs
+#         for i in range(num_layers):
+#             output=layers.LSTM(num_units, return_sequences=True,
+#                             kernel_regularizer=regularizers.l2(decay),
+#                             bias_regularizer=regularizers.l2(decay),
+#                             activation='sigmoid',name='lstm{}'.format(i))(output)
+#     output=output[:,-1,:]
+#     output=layers.Dense(emb_size, kernel_regularizer=regularizers.l2(decay),
+#                                     bias_regularizer=regularizers.l2(decay),name='dense_final')(output)
+#     return Model(inputs=inputs,outputs=output)
+
 class RNN2(RNN1):
     """
     RNN 2 model for recommendation, which uses category information.
     """
-    def __init__(self, emb_size, num_units=32,
-                 num_layers=1, decay=0):
+    def __init__(self, embeddings, num_units=32,
+                 num_layers=1, decay=0,categories=None):
         """
         Class initializer.
 
@@ -83,8 +112,13 @@ class RNN2(RNN1):
         :param num_layers: the number of LSTM layers.
         :param decay: an L2 decay parameter for regularization.
         """
-        super().__init__(emb_size,num_units, num_layers, decay)
+        assert categories is not None
+        super().__init__(embeddings,num_units, num_layers, decay)
 
+        emb_size=embeddings.shape[1]
+        self.cate_emb_layer=layers.Embedding(categories.shape[0],categories.shape[1],
+                    embeddings_initializer=initializers.Constant(categories),
+                    mask_zero=True,trainable=False,name='cate_emb')
         self.order_dense = layers.Dense(emb_size,name='order_dense')
         self.click_dens=layers.Dense(emb_size,name='click_dense')
         self.softmax=layers.Softmax(1)
@@ -98,12 +132,19 @@ class RNN2(RNN1):
         :param candidates: a tuple of input tensors for candidates.
         :return: the predicted scores for all candidates.
         """
-        orders=layers.concatenate([inputs[0],inputs[2]])
+        
+        orders=layers.concatenate([self.item_emb_layer(inputs[0]),self.cate_emb_layer(inputs[0])])
+        orders_mask=self.item_emb_layer.compute_mask(inputs[0])
         orders=self.order_dense(orders)
-        orders = self.lstm(orders,mask=inputs[1])
-        clicks=layers.concatenate([inputs[3],inputs[5]])
+        if self.num_layers<2:
+            orders = self.lstm(orders,mask=orders_mask)
+        else:
+            for layer in self.lstm:
+                orders=layer(orders_mask,mask=orders_mask)
+        clicks=layers.concatenate([self.item_emb_layer(inputs[1]),self.cate_emb_layer(inputs[1])])
+        clicks_mask=self.item_emb_layer.compute_mask(inputs[1])
         clicks = self.click_dense(clicks)
-        out = self._run_attention(orders, clicks,inputs[4])
+        out = self._run_attention(orders, clicks,clicks_mask)
         return self.dense_final(out)
         #cands_v = self._lookup_candidates()
 
@@ -173,7 +214,7 @@ class RNN4(RNN2):
     RNN 3 model for recommendation, which uses clicks for attention keys.
     """
 
-    def __init__(self, emb_size, num_layers, num_units, decay):
+    def __init__(self, embeddings, num_layers, num_units, decay,category):
         """
         Class initializer.
 
@@ -183,7 +224,7 @@ class RNN4(RNN2):
         :param num_units: the number of hidden units in each LSTM cell.
         :param decay: an L2 decay parameter for regularization.
         """
-        super().__init__(emb_size, num_layers=num_layers, num_units=num_units)
+        super().__init__(embeddings, num_layers, num_units,decay,category)
         if num_layers<2:
             self.lstm_click=layers.Bidirectional(layers.LSTM(num_units, return_sequences=True,
                                                  kernel_regularizer=regularizers.l2(decay),
