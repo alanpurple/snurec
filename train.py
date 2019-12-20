@@ -72,11 +72,11 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
     start_time = time.time()
 
     #users = read_users(os.path.join(data, 'users'))
-    item_emb=np.load('doc2vec_128_2_10epochs_table.npy')
+    item_emb=np.load('doc2vec_32_2_10epochs_table.npy').astype(np.float32)
     has_cate=False
     if algorithm=='rnn-v2' or algorithm=='rnn-v3' or algorithm=='rnn-v4':
         has_cate=True
-        category_table=np.load('./cate.npy')
+        category_table=np.load('./cate.npy').astype(np.float32)
 
     # trn_path = os.path.join(data, 'training')
     # val_path = os.path.join(data, 'validation')
@@ -111,10 +111,10 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
         :param data: the dataset of multiple batches.
         :return: the calculated loss.
         """
-        loss=np.float64(0.)
-        batches=np.float64(0.)
+        loss=np.float32(0.)
+        batches=np.float32(0.)
         for inputs, labels in data:
-            logits = tf.cast(model(inputs),tf.float64)
+            logits = model(inputs)
             logits=tf.matmul(logits,tf.transpose(item_emb))
             loss+= tf.reduce_mean(cce(labels, logits))
             batches+=1.
@@ -134,7 +134,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
         """
         n_data, n_corrects = 0, 0
         for inputs, labels in data:
-            logits = tf.cast(model(inputs),tf.float64)
+            logits = model(inputs)
             logits=tf.matmul(logits,tf.transpose(item_emb))
             top_k= tf.math.top_k(logits, k, sorted=True)[1]
             compared = tf.equal(tf.expand_dims(labels, axis=1), top_k)
@@ -170,7 +170,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
     
     @tf.function
     def compute_loss(inputs):
-        logits=tf.cast(model(inputs),tf.float64)
+        logits=model(inputs)
         logits=tf.matmul(logits,tf.transpose(item_emb))
         return tf.reduce_mean(cce(labels, logits))
     for epoch in range(num_epochs + 1):

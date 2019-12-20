@@ -65,7 +65,7 @@ def main(algorithm=None, load=None, data='../out/instances', gpu=0, pos_cases=10
     path_out = os.path.join(load, 'predictions')
 
     titles = read_titles(path_items)
-    item_emb=np.load('doc2vec_128_2_10epochs_table.npy')
+    item_emb=np.load('doc2vec_32_2_10epochs_table.npy')
     emb_size=item_emb.shape[1]
     has_cate=False
     if algorithm=='rnn-v2' or algorithm=='rnn-v3' or algorithm=='rnn-v4':
