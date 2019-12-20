@@ -107,7 +107,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
     print('dataset loading complete')
 
     cce=losses.SparseCategoricalCrossentropy(True)
-
+    @tf.function
     def evaluate_loss(model, data):
         """
         Evaluate the current loss of a given model for all data.
@@ -136,8 +136,6 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
             logits=tf.matmul(logits,tf.transpose(item_emb))
             loss+= tf.reduce_mean(cce(labels, logits))
             batches+=1.
-            if batches%1000 ==0:
-                print('finishing batch{}'.format(batches))
         return loss / batches
 
 
@@ -196,6 +194,25 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
 
     num_batches=int(len(train_df)/batch_size)
     
+    @tf.function
+    def compute_loss(inputs):
+        if has_cate:
+            batch_input=[
+                item_emb_layer(inputs[0]),
+                item_emb_layer.compute_mask(inputs[0]),
+                cate_emb_layer(inputs[0]),
+                item_emb_layer(inputs[1]),
+                item_emb_layer.compute_mask(inputs[1]),
+                cate_emb_layer(inputs[1])
+            ]
+        else:
+            batch_input=[
+                item_emb_layer(inputs),
+                item_emb_layer.compute_mask(inputs)
+            ]
+        logits=tf.cast(model(batch_input),tf.float64)
+        logits=tf.matmul(logits,tf.transpose(item_emb))
+        return tf.reduce_mean(cce(labels, logits))
     for epoch in range(num_epochs + 1):
         if epoch == 0:
             trn_loss = evaluate_loss(model, trn_data)
@@ -204,24 +221,8 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
             desc = f'Epoch {epoch}'
             trn_loss = 0.
             for inputs, labels in tqdm.tqdm(trn_data, desc, num_batches):
-                if has_cate:
-                    batch_input=[
-                        item_emb_layer(inputs[0]),
-                        item_emb_layer.compute_mask(inputs[0]),
-                        cate_emb_layer(inputs[0]),
-                        item_emb_layer(inputs[1]),
-                        item_emb_layer.compute_mask(inputs[1]),
-                        cate_emb_layer(inputs[1])
-                    ]
-                else:
-                    batch_input=[
-                        item_emb_layer(inputs),
-                        item_emb_layer.compute_mask(inputs)
-                    ]
                 with tf.GradientTape() as tape:
-                    logits=tf.cast(model(batch_input),tf.float64)
-                    logits=tf.matmul(logits,tf.transpose(item_emb))
-                    loss = tf.reduce_mean(cce(labels, logits))
+                    loss=compute_loss(inputs)
                 gradients = tape.gradient(loss, model.trainable_variables)
                 optimizer.apply_gradients(zip(gradients, model.trainable_variables))
                 trn_loss+=loss
