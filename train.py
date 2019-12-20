@@ -112,12 +112,12 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
         :return: the calculated loss.
         """
         loss=np.float64(0.)
-        batches=0
+        batches=np.float64(0.)
         for inputs, labels in data:
             logits = tf.cast(model(inputs),tf.float64)
             logits=tf.matmul(logits,tf.transpose(item_emb))
             loss+= tf.reduce_mean(cce(labels, logits))
-            batches+=1
+            batches+=1.
         return loss / batches
 
     @tf.function
@@ -166,7 +166,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
     os.makedirs(os.path.join(out, 'model'), exist_ok=True)
     optimizer = keras.optimizers.Adam(learning_rate=lr)
 
-    num_batches=int(len(train_df)/batch_size)
+    num_batches=np.float64(int(len(train_df)/batch_size))
     
     @tf.function
     def compute_loss(inputs):
