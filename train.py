@@ -72,7 +72,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
     start_time = time.time()
 
     #users = read_users(os.path.join(data, 'users'))
-    item_emb=np.load('doc2vec_32_2_10epochs_table.npy').astype(np.float32)
+    item_emb=np.load('doc2vec_128_2_10epochs_table.npy').astype(np.float32)
     has_cate=False
     if algorithm=='rnn-v2' or algorithm=='rnn-v3' or algorithm=='rnn-v4':
         has_cate=True
