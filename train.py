@@ -141,7 +141,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
             corrects = tf.reduce_sum(tf.cast(compared, dtype=tf.float32), axis=1)
             accuracy = tf.reduce_mean(corrects)
             n_data += labels.shape[0]
-            n_corrects += accuracy.numpy().item() * labels.shape[0]
+            n_corrects += accuracy * labels.shape[0]
         return n_corrects * 100 / n_data
 
     if has_cate:

@@ -96,7 +96,7 @@ def main(algorithm=None, load=None, data='../out/instances', gpu=0, pos_cases=10
             
         else:
             model=initialize_model(algorithm,item_emb,2,32,0)
-        with open('model/best_weights.pkl','wb') as best_temp:
+        with open('model/best_weights.pkl','rb') as best_temp:
             weight_dict=pickle.load(best_temp)
         for k,v in weight_dict.items():
             for layer in model.layers:
