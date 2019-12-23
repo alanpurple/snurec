@@ -132,7 +132,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
         :param top_k: the number of items to be evaluated.
         :return: the calculated accuracy.
         """
-        n_data, n_corrects = 0, 0
+        n_data, n_corrects = 0., 0.
         for inputs, labels in data:
             logits = model(inputs)
             logits=tf.matmul(logits,tf.transpose(item_emb))
