@@ -94,10 +94,11 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
 
     trn_data=tf.data.Dataset.from_generator(partial(gen,train_df),
             (tf.int32,tf.int32),((None,),())).shuffle(512).padded_batch(batch_size,([seq_len],[]),drop_remainder=True).prefetch(tf.data.experimental.AUTOTUNE)
+    # NoneType not supported error occured without "drop_remainder=True" setting, in line "n_data+=label.shape[0]" in evaluate_accuracy
     val_data=tf.data.Dataset.from_generator(partial(gen,val_df),
-            (tf.int32,tf.int32),((None,),())).padded_batch(64,([seq_len],[]))
+            (tf.int32,tf.int32),((None,),())).padded_batch(64,([seq_len],[]),drop_remainder=True)
     test_data=tf.data.Dataset.from_generator(partial(gen,test_df),
-            (tf.int32,tf.int32),((None,),())).padded_batch(64,([seq_len],[]))
+            (tf.int32,tf.int32),((None,),())).padded_batch(64,([seq_len],[]),drop_remainder=True)
 
     print('dataset loading complete')
 
