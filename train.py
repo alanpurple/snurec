@@ -26,8 +26,7 @@ import pickle
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-from tensorflow_core.python.keras import losses,layers,initializers
-from tensorflow import keras
+from tensorflow.keras import losses,layers,initializers,optimizers
 from utils import read_instances,read_titles,read_users,initialize_model
 
 def gen(df):
@@ -139,7 +138,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
             logits=tf.matmul(logits,tf.transpose(item_emb))
             top_k= tf.math.top_k(logits, k, sorted=True)[1]
             compared = tf.equal(tf.expand_dims(labels, axis=1), top_k)
-            corrects = tf.reduce_sum(tf.cast(compared, dtype=tf.float32), axis=1)
+            corrects = tf.reduce_sum(tf.cast(compared, tf.float32), axis=1)
             accuracy = tf.reduce_mean(corrects)
             n_data += labels.shape[0]
             n_corrects += accuracy * labels.shape[0]
@@ -165,7 +164,7 @@ def main(data='/mnt/sda1/common/SNU_recommendation/wmind_data/ver2',
     best_epoch = 0
     best_loss = np.inf
     os.makedirs(os.path.join(out, 'model'), exist_ok=True)
-    optimizer = keras.optimizers.Adam(learning_rate=lr)
+    optimizer = optimizers.Adam(learning_rate=lr)
 
     num_batches=np.float64(int(len(train_df)/batch_size))
     

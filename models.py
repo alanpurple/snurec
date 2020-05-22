@@ -15,7 +15,7 @@ rewritten by Alan Anderson (alan@wemakeprice.com)
 
 """
 import tensorflow as tf
-from tensorflow_core.python.keras import Model,layers,regularizers,Input,initializers
+from tensorflow.keras import Model,layers,regularizers,Input,initializers
 
 class RNN1(Model):
     """

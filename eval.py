@@ -19,7 +19,7 @@ rewritten by Alan Anderson (alan@wemakeprice.com)
 import click
 import os
 import tensorflow as tf
-from tensorflow_core.python.keras import layers,initializers
+from tensorflow.keras import layers,initializers
 import numpy as np
 import pickle
 import models
